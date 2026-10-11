@@ -312,6 +312,53 @@ public class WorldGenerator : MonoBehaviour
         return mundoChunks.TryGetValue(celda, out List<GameObject> objs) ? objs : null;
     }
 
+    // Un contenedor por celda, en la RAÍZ de la escena (no bajo el WorldGenerator).
+    //
+    // ⚠️ Antes todas las piezas eran hijas directas del WorldGenerator: tras un rato jugando eran
+    // miles de hijos bajo un solo transform (las celdas con estado nunca se descargan). En 6000.6
+    // eso crasheaba el editor al seleccionar el WorldGenerator en la Hierarchy y al parar Play
+    // (destruir esa jerarquía de golpe). Además, una raíz gigante es lenta: cualquier cambio de
+    // transform ensucia toda la jerarquía y Unity no la puede repartir entre hilos.
+    private readonly Dictionary<Vector3Int, Transform> contenedoresCelda = new Dictionary<Vector3Int, Transform>();
+
+    /// <summary>
+    /// Registra la pieza en la celda y la cuelga del contenedor de esa celda. Solo mueve piezas
+    /// cuyo padre es el WorldGenerator; si alguna está colgada de otra cosa, la deja donde está.
+    /// </summary>
+    private void RegistrarEnCelda(Vector3Int celda, GameObject go)
+    {
+        mundoChunks[celda].Add(go);
+        if (go != null && go.transform.parent == transform)
+            go.transform.SetParent(ContenedorDeCelda(celda), false);
+    }
+
+    /// <summary>
+    /// El contenedor copia posición/rotación/escala del WorldGenerator, así el espacio local es el
+    /// mismo: SetParent(..., false) deja la pieza exactamente donde estaba y cualquier cuenta con
+    /// localPosition sigue valiendo.
+    /// </summary>
+    private Transform ContenedorDeCelda(Vector3Int celda)
+    {
+        if (contenedoresCelda.TryGetValue(celda, out Transform cont) && cont != null) return cont;
+
+        GameObject go = new GameObject($"Celda {celda.x},{celda.y},{celda.z}");
+        UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(go, gameObject.scene);
+        cont = go.transform;
+        cont.SetPositionAndRotation(transform.position, transform.rotation);
+        cont.localScale = transform.lossyScale;
+        contenedoresCelda[celda] = cont;
+        return cont;
+    }
+
+    private void DestruirContenedorCelda(Vector3Int celda)
+    {
+        if (contenedoresCelda.TryGetValue(celda, out Transform cont))
+        {
+            if (cont != null) Destroy(cont.gameObject);
+            contenedoresCelda.Remove(celda);
+        }
+    }
+
     // Tracker de paredes End instanciadas para poder reaplicar offsets en runtime sin regenerar.
     private List<Vector3Int> celdasActivas = new List<Vector3Int>();
     private Vector3Int celdaActualJugador = new Vector3Int(-9999, -9999, -9999);
@@ -856,6 +903,10 @@ public class WorldGenerator : MonoBehaviour
             foreach (GameObject obj in objs)
                 if (obj != null) Destroy(obj);
 
+        foreach (Transform cont in contenedoresCelda.Values)
+            if (cont != null) Destroy(cont.gameObject);
+        contenedoresCelda.Clear();
+
         mundoChunks.Clear();
         celdasActivasSet.Clear();
 
@@ -1161,6 +1212,7 @@ public class WorldGenerator : MonoBehaviour
                 foreach (GameObject go in objs)
                     if (go != null) Destroy(go);
 
+                DestruirContenedorCelda(c);
                 mundoChunks.Remove(c);
                 celdasActivasSet.Remove(c);
                 if (descartarCacheAlDescargar) cacheCeldaVacia.Remove(c);
@@ -2143,7 +2195,7 @@ public class WorldGenerator : MonoBehaviour
         ProcesarPuntosSpawnItem(go, celda);
 
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
         return true;
     }
 
@@ -2164,7 +2216,7 @@ public class WorldGenerator : MonoBehaviour
 
         GameObject go = Instantiate(prefabSeccion, pos, rotacion ?? Quaternion.identity, transform);
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
     /// <summary>
@@ -2541,7 +2593,7 @@ public class WorldGenerator : MonoBehaviour
         }
 
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
     /// <summary>Dirección cardinal aproximada de un macro chunk a otro (NORTE, SURESTE, etc).</summary>
@@ -2651,7 +2703,7 @@ public class WorldGenerator : MonoBehaviour
                         // Instanciar usando la posición y rotación exacta del punto de spawn
                         GameObject go = Instantiate(prefabElegido, pt.position, pt.rotation, transform);
                         go.SetActive(false);
-                        mundoChunks[celda].Add(go);
+                        RegistrarEnCelda(celda, go);
                     }
                 }
                 else
@@ -2680,7 +2732,7 @@ public class WorldGenerator : MonoBehaviour
 
                         GameObject go = Instantiate(prefabElegido, pos, Quaternion.Euler(0f, Random.Range(0, 360), 0f), transform);
                         go.SetActive(false);
-                        mundoChunks[celda].Add(go);
+                        RegistrarEnCelda(celda, go);
                     }
                 }
             }
@@ -2758,7 +2810,7 @@ public class WorldGenerator : MonoBehaviour
                     z * cellSize + (cellSize / 2f));
                 GameObject goPozo = Instantiate(prefabPozo, posPozo, Quaternion.Euler(0f, yawPozo, 0f), transform);
                 goPozo.SetActive(false);
-                mundoChunks[celda].Add(goPozo);
+                RegistrarEnCelda(celda, goPozo);
             }
         }
 
@@ -2784,7 +2836,7 @@ public class WorldGenerator : MonoBehaviour
                         goCentro = Instantiate(prefabCentro, posCentro, Quaternion.identity, transform);
                         ProcesarPuntosSpawnItem(goCentro, celda); // mismo Random.State ya sembrado arriba (hashCentro)
                         goCentro.SetActive(false);
-                        mundoChunks[celda].Add(goCentro);
+                        RegistrarEnCelda(celda, goCentro);
                     }
                 }
                 else
@@ -2799,7 +2851,7 @@ public class WorldGenerator : MonoBehaviour
                 GameObject prefabEscalera = prefabsEscaleras[Random.Range(0, prefabsEscaleras.Length)];
                 GameObject go = Instantiate(prefabEscalera, posEscalera, Quaternion.identity, transform);
                 go.SetActive(false);
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
             }
 
             // Carteles con el nombre de la sala en la celda central. Con cartelSalaSoloAlNorte
@@ -2842,7 +2894,7 @@ public class WorldGenerator : MonoBehaviour
                     }
 
                     goSign.SetActive(false); // La burbuja lo activará cuando corresponda
-                    mundoChunks[celda].Add(goSign);
+                    RegistrarEnCelda(celda, goSign);
                 }
             }
 
@@ -2880,7 +2932,7 @@ public class WorldGenerator : MonoBehaviour
 
                 GameObject cofreInstance = Instantiate(notaMision.prefabCofre, posCofre, Quaternion.identity, transform);
                 cofreInstance.SetActive(false);
-                mundoChunks[celda].Add(cofreInstance);
+                RegistrarEnCelda(celda, cofreInstance);
             }
         }
 
@@ -2920,7 +2972,7 @@ public class WorldGenerator : MonoBehaviour
                 GameObject prefabPilar = prefabsPilaresGigantes[Random.Range(0, prefabsPilaresGigantes.Length)];
                 GameObject go = Instantiate(prefabPilar, posPilar, Quaternion.identity, transform);
                 go.SetActive(false);
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
             }
         }
 
@@ -2953,7 +3005,7 @@ public class WorldGenerator : MonoBehaviour
                 GameObject go = Instantiate(prefab, pos, RotacionDesdeNormalInterior(normalInterior) * Quaternion.Euler(0, 180f, 0), transform);
                 ProcesarPuntosSpawnItemDePared(go, celda, pos, normalInterior);
                 go.SetActive(false); // Estará apagado hasta que lo active la Burbuja
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
 
                 // Intentar colocar cartel de coordenadas en esta pared
                 IntentarInstanciarCartelCoordenadas(pos, normalInterior, celda);
@@ -3023,7 +3075,7 @@ public class WorldGenerator : MonoBehaviour
                 GameObject go = Instantiate(prefab, pos, RotacionDesdeNormalInterior(normalInterior) * Quaternion.Euler(0, 180f, 0), transform);
                 ProcesarPuntosSpawnItemDePared(go, celda, pos, normalInterior);
                 go.SetActive(false);
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
 
                 // Intentar colocar cartel de coordenadas en esta pared
                 IntentarInstanciarCartelCoordenadas(pos, normalInterior, celda);
@@ -3096,7 +3148,7 @@ public class WorldGenerator : MonoBehaviour
 
                 GameObject go = Instantiate(prefab, pos, rot, transform);
                 go.SetActive(false);
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
             }
 
             Vector3 posBasePiel = origin + new Vector3(x * cellSize + (cellSize / 2f), y * cellSize, z * cellSize + (cellSize / 2f));
@@ -3146,7 +3198,7 @@ public class WorldGenerator : MonoBehaviour
                 Quaternion rotBalcon = Quaternion.LookRotation(dirF, Vector3.up);
                 GameObject goBalcon = Instantiate(prefabBalcon, posBalcon, rotBalcon, transform);
                 goBalcon.SetActive(false);
-                mundoChunks[celda].Add(goBalcon);
+                RegistrarEnCelda(celda, goBalcon);
             }
 
         }
@@ -3276,7 +3328,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, rot, transform);
         go.name = prefab.name + "_vert_sala_" + nombre;
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
     /// <summary>
@@ -3328,7 +3380,7 @@ public class WorldGenerator : MonoBehaviour
                         Vector3 posPuerta = cellCenter + dirF * hs;
                         GameObject puerta = Instantiate(prefabPuerta, posPuerta, rot, transform);
                         puerta.SetActive(false);
-                        mundoChunks[celda].Add(puerta);
+                        RegistrarEnCelda(celda, puerta);
                     }
                 }
             }
@@ -3368,7 +3420,7 @@ public class WorldGenerator : MonoBehaviour
                     GameObject goV = Instantiate(prefabVert, posVert, rotVert, transform);
                     goV.name = prefabVert.name + "_termino_vert";
                     goV.SetActive(false);
-                    mundoChunks[celda].Add(goV);
+                    RegistrarEnCelda(celda, goV);
                 }
             }
 
@@ -3619,7 +3671,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, rot, transform);
         go.name = prefab.name + (esPiso ? "_piso" : "_techo");
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
 
@@ -3718,7 +3770,7 @@ public class WorldGenerator : MonoBehaviour
                             GameObject luz = Instantiate(prefabLuzTecho, posLuz, Quaternion.Euler(0, yawBase, 0), transform);
                             luz.name = prefabLuzTecho.name + "_carril" + libres[i] + sufijoEje;
                             luz.SetActive(false);
-                            mundoChunks[celda].Add(luz);
+                            RegistrarEnCelda(celda, luz);
                         }
                     }
                 }
@@ -3851,7 +3903,7 @@ public class WorldGenerator : MonoBehaviour
             }
 
             go.SetActive(false); // La burbuja lo activará cuando corresponda
-            mundoChunks[celda].Add(go);
+            RegistrarEnCelda(celda, go);
             
             // LOG DE DIAGNOSTICO DE CARTEL DE COORDENADAS
             int emx = Mathf.FloorToInt((float)emptyCell.x / macroSize);
@@ -4177,7 +4229,7 @@ public class WorldGenerator : MonoBehaviour
                 GameObject goL = Instantiate(prefabPasarelaL, posL, Quaternion.Euler(0f, yawEsquina, 0f), transform);
                 goL.name = prefabPasarelaL.name + "_L";
                 goL.SetActive(false);
-                mundoChunks[celda].Add(goL);
+                RegistrarEnCelda(celda, goL);
 
                 // Alineación por conector (opcional pero recomendada): si el prefab tiene empties
                 // "Conector" en las puntas de sus brazos, se pega el brazo del lado X abierto al
@@ -4395,7 +4447,7 @@ public class WorldGenerator : MonoBehaviour
                     GameObject tramo = Instantiate(prefabTramoEscalera, posTramo, go.transform.rotation, transform);
                     tramo.name = prefabTramoEscalera.name + "_tramo" + i;
                     tramo.SetActive(false);
-                    mundoChunks[celda].Add(tramo);
+                    RegistrarEnCelda(celda, tramo);
                 }
 
             }
@@ -4422,7 +4474,7 @@ public class WorldGenerator : MonoBehaviour
         go.name = nombre;
 
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
     private GameObject InstanciarYRegistrarPasarelaRotacion(Vector3Int celda, GameObject prefab, Vector3 pos, Quaternion rotacion, string nombre)
@@ -4450,7 +4502,7 @@ public class WorldGenerator : MonoBehaviour
         Random.state = prevSpawn;
 
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
         return go;
     }
 
@@ -4611,7 +4663,7 @@ public class WorldGenerator : MonoBehaviour
 
                 GameObject go = Instantiate(prefab, pos, rot, transform);
                 go.SetActive(false);
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
             }
 
             Random.state = prev;
@@ -4656,7 +4708,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, rotacion, transform);
         go.name = nombre;
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
     /// <summary>
@@ -4955,7 +5007,7 @@ public class WorldGenerator : MonoBehaviour
                 GameObject go = Instantiate(prefab, pos, rot, transform);
                 go.name = prefab.name + "_cierre";
                 go.SetActive(false);
-                mundoChunks[celda].Add(go);
+                RegistrarEnCelda(celda, go);
             }
             else
             {
@@ -4973,7 +5025,7 @@ public class WorldGenerator : MonoBehaviour
                     r.sharedMaterial = mat;
                 }
                 placeholder.SetActive(false);
-                mundoChunks[celda].Add(placeholder);
+                RegistrarEnCelda(celda, placeholder);
             }
         };
 
@@ -5102,7 +5154,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, rot, transform);
         go.name = prefab.name + "_externo";
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
 
         // Pilares: para paredes End se restringen a la mitad del tramo largo (horizontal o vertical).
         InstanciarPilarParaParedExterior(celda, pos, hash, dirExterior, usaEnd, signoLadoLargo, signoLadoLargoV);
@@ -5193,7 +5245,7 @@ public class WorldGenerator : MonoBehaviour
             GameObject pilar = Instantiate(prefabPilar, posPilar, rot, transform);
             pilar.name = prefabPilar.name + "_soporte_externo";
             pilar.SetActive(false);
-            mundoChunks[celda].Add(pilar);
+            RegistrarEnCelda(celda, pilar);
         }
     }
 
@@ -5266,7 +5318,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, rot, transform);
         go.name = prefab.name + sufijo;
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
     }
 
 
@@ -5302,7 +5354,7 @@ public class WorldGenerator : MonoBehaviour
             GameObject go = Instantiate(prefab, pos, Quaternion.identity, transform);
             go.name = prefab.name + $"_luz_sala_{i}";
             go.SetActive(false);
-            mundoChunks[celda].Add(go);
+            RegistrarEnCelda(celda, go);
         }
 
         Random.state = prev;
@@ -5335,7 +5387,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, Quaternion.Euler(0, rotY, 0), transform);
         go.name = prefab.name + "_piso_externo";
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
 
         // Pilares entre el piso del pasillo y la placa exterior (mismo prefab de pared, girado)
         if (pilaresEnTechoPisoExterior)
@@ -5371,7 +5423,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, Quaternion.Euler(0, rotY, 0), transform);
         go.name = prefab.name + "_techo_externo";
         go.SetActive(false);
-        mundoChunks[celda].Add(go);
+        RegistrarEnCelda(celda, go);
 
         // Pilares entre el techo del pasillo y la placa exterior (mismo prefab de pared, girado)
         if (pilaresEnTechoPisoExterior)
@@ -5614,7 +5666,7 @@ public class WorldGenerator : MonoBehaviour
         {
             GameObject cofre = Instantiate(nota.prefabCofre, basePos, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f), transform);
             cofre.SetActive(activar);
-            mundoChunks[celda].Add(cofre);
+            RegistrarEnCelda(celda, cofre);
         }
 
         // 2. Materiales sueltos alrededor
@@ -5630,7 +5682,7 @@ public class WorldGenerator : MonoBehaviour
                 Vector3 pos = basePos + new Vector3(Mathf.Cos(a) * radio, 0.3f, Mathf.Sin(a) * radio);
                 GameObject mat = Instantiate(prefabMat, pos, Quaternion.Euler(Random.Range(0f, 360f), Random.Range(0f, 360f), Random.Range(0f, 360f)), transform);
                 mat.SetActive(activar);
-                mundoChunks[celda].Add(mat);
+                RegistrarEnCelda(celda, mat);
             }
         }
 
@@ -5642,7 +5694,7 @@ public class WorldGenerator : MonoBehaviour
             NotaMundo nm = goNota.GetComponent<NotaMundo>();
             if (nm != null) nm.data = nota.notaSiguiente;
             goNota.SetActive(activar);
-            mundoChunks[celda].Add(goNota);
+            RegistrarEnCelda(celda, goNota);
         }
 
         Random.state = prev;
