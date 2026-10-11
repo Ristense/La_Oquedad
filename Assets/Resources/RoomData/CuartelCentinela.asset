@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 58f7e426473f2cb42ae852d9cad74517, type: 3}
+  m_Name: CuartelCentinela
+  m_EditorClassIdentifier: Assembly-CSharp::RoomData
+  nombreSala: Cuartel Centinelas
+  esCuartelCentinelas: 1
+  lootPosible: []
+  cantidadLoot: {x: 1, y: 3}
+  mobiliario: []
+  prefabsCentrales: []
+  generarLuces: 1
+  prefabsLuces: []
+  cantidadLuces: {x: 1, y: 2}
+  luzOffsetTecho: 0.05

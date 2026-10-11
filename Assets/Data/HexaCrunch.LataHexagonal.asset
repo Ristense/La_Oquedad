@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 18012f1ebd65026468f55b954d9d6c1e, type: 3}
+  m_Name: HexaCrunch.LataHexagonal
+  m_EditorClassIdentifier: Assembly-CSharp::ConsumibleData
+  nombreArticulo: HexaCrunch.LataHexagonal
+  tipoMaterial: Comida
+  categoria: 1
+  peso: 0.5
+  width: 1
+  height: 1
+  icon: {fileID: 0}
+  esModulo: 0
+  moduloAnchoExtra: 0
+  moduloAltoExtra: 0
+  esFraccionable: 1
+  porcionesMaximas: 8
+  restaurarComida: 80
+  restaurarAgua: 0
+  restaurarSueno: 0
+  restaurarBateria: 0

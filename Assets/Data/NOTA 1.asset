@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37677d0991331e74ba98f9f2d4462ff9, type: 3}
+  m_Name: NOTA 1
+  m_EditorClassIdentifier: Assembly-CSharp::NotaData
+  titulo: REGISTRO // 07-11-2489 - 1
+  contenido: "Hoy encontr\xE9 una papa con forma de casco espacial.\nDecid\xED nombrarla
+    Comandante Papa porque claramente ten\xEDa cara de saber lo que hac\xEDa.\n\nLa
+    dej\xE9 cinco minutos sola mientras iba por agua."
+  autor: Ketchup
+  tieneMision: 0
+  prefabCofre: {fileID: 0}
+  esMisionEncadenada: 1
+  distanciaMisionCeldas: 1
+  materialesRecompensa: []
+  cantidadMateriales: {x: 2, y: 4}
+  notaSiguiente: {fileID: 11400000, guid: 38dbb55976418b841a201229e0933949, type: 2}
+  prefabNotaFisica: {fileID: 4736186203192732599, guid: 63e34a5a1764cd349a79dec58b4876cc, type: 3}

@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------
+# Unity — carpetas generadas. NUNCA se versionan: Unity las vuelve
+# a crear sola al abrir el proyecto, y pesan más que el proyecto.
+# Library por sí sola son ~5 GB acá.
+# ---------------------------------------------------------------
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Paquetes resueltos por el Package Manager (se reconstruyen desde Packages/manifest.json)
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# ---------------------------------------------------------------
+# Proyectos/soluciones de IDE: los regenera Unity en cada import.
+# Versionarlos solo genera conflictos.
+# ---------------------------------------------------------------
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.vs/
+.vscode/
+.idea/
+
+# ---------------------------------------------------------------
+# Builds y artefactos
+# ---------------------------------------------------------------
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# ---------------------------------------------------------------
+# Sistema operativo
+# ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------
+# Claude Code: configuración local de la máquina, no del proyecto
+# ---------------------------------------------------------------
+.claude/settings.local.json

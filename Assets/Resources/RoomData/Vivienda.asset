@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 58f7e426473f2cb42ae852d9cad74517, type: 3}
+  m_Name: Vivienda
+  m_EditorClassIdentifier: Assembly-CSharp::RoomData
+  nombreSala: VIVIENDA
+  esCuartelCentinelas: 0
+  pesoAparicion: 1
+  lootPosible:
+  - prefab: {fileID: 5795496193686680750, guid: ecebd1c20f15cae499df7aa8593ec870, type: 3}
+    probabilidad: 0.5
+  - prefab: {fileID: 3951722747054974299, guid: 258af002f8c2d4d4b97309dcb45d29a1, type: 3}
+    probabilidad: 0.5
+  cantidadLoot: {x: 3, y: 5}
+  mobiliario: []
+  prefabsCentrales:
+  - {fileID: 1695304201056143589, guid: 9a49f0a02f53b954c85e341aba561d08, type: 3}
+  seccionAgua: {fileID: 694945247841648582, guid: 6e659f1d88d2426478d826ff554358a3, type: 3}
+  seccionComida: {fileID: 0}
+  seccionBateria: {fileID: 2937392954690598533, guid: 39dd7ba27c0c2ac4887c65f0b7253e35, type: 3}
+  seccionDormir: {fileID: 0}
+  seccionAlmacenamiento: {fileID: 0}
+  generarLuces: 1
+  prefabsLuces:
+  - {fileID: 2366967968262966954, guid: 411173357bc5e884c91199356ecbeed0, type: 3}
+  - {fileID: 2961644222067713171, guid: 703b9b900cc5d264b90f286b763cba97, type: 3}
+  cantidadLuces: {x: 0, y: 3}
+  luzOffsetTecho: 0.05

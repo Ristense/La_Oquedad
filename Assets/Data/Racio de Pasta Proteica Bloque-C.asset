@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 18012f1ebd65026468f55b954d9d6c1e, type: 3}
+  m_Name: Racio de Pasta Proteica Bloque-C
+  m_EditorClassIdentifier: Assembly-CSharp::ConsumibleData
+  nombreArticulo: Racio de Pasta Proteica "Bloque-C"
+  tipoMaterial: Comida
+  peso: 0.2
+  width: 1
+  height: 2
+  icon: {fileID: 0}
+  restaurarComida: 5
+  restaurarAgua: 5
+  restaurarSueno: 0
+  restaurarBateria: 0

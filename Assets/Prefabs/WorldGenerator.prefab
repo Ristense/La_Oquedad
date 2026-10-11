@@ -1,0 +1,217 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8899486111887347672
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 435522088629756470}
+  - component: {fileID: 5329751470378876368}
+  m_Layer: 0
+  m_Name: WorldGenerator
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &435522088629756470
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8899486111887347672}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -11.24371, y: -0.22735, z: 42.474213}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5329751470378876368
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8899486111887347672}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88186d1ff73948244bc11dffd06d67a8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WorldGenerator
+  cellSize: 20
+  prefabsPared:
+  - {fileID: 0}
+  - {fileID: 0}
+  prefabsPiso:
+  - {fileID: 0}
+  - {fileID: 4982856759500230456, guid: c85fb068d7e899e499f8ecc916d7d9dd, type: 3}
+  - {fileID: 0}
+  prefabPisoSeguro: {fileID: 7849830227422385587, guid: fc274679e72739c4397b506d3800ff88, type: 3}
+  prefabCartelCoordenadas: {fileID: 0}
+  probabilidadCartelCoordenadas: 1
+  cartelCoordenadasOffset: 1
+  separacionCartelesCeldas: 5
+  prefabsPilaresGigantes:
+  - {fileID: 919132149155446097, guid: 6708de82135a6f84ea282760050b1c91, type: 3}
+  prefabsParedExterior:
+  - {fileID: 0}
+  - {fileID: 1040978147141665059, guid: b91aed55559d2554b84e575fb8782cde, type: 3}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  prefabsParedExteriorEnd:
+  - {fileID: 2635250161796783743, guid: 2d021b1af97cfe64da5751ed37096598, type: 3}
+  prefabsPilaresParedExterior:
+  - {fileID: 0}
+  pilaresEnTechoPisoExterior: 1
+  prefabsAristaExteriorTecho:
+  - {fileID: 5763892548344534468, guid: e60f2a55b15e7b444b24091a9dfb510c, type: 3}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  prefabsAristaExteriorTechoEnd: []
+  prefabsAristaExteriorPiso:
+  - {fileID: 0}
+  prefabsAristaExteriorPisoEnd: []
+  prefabsAristaExteriorVertical:
+  - {fileID: 0}
+  - {fileID: 1719657559163361045, guid: c4006f0c36d2db34ba7a950024c436b8, type: 3}
+  - {fileID: 3386910642371412098, guid: 0fe9d838d7a477e448f1199d684ef100, type: 3}
+  - {fileID: 8423015435415616197, guid: 65a47fa114843794abcbef55424a4958, type: 3}
+  - {fileID: 1953557994282941792, guid: 92892f8eac5243a4db7e9bd5d5b63379, type: 3}
+  generarAristasExteriores: 1
+  probabilidadAristaExterior: 1
+  generarAristasVerticales: 1
+  nivelesAristasVerticales: 0100000003000000
+  offsetAristaVertical: 0
+  offsetYAristaVertical: 10
+  yawBaseAristaVertical: 0
+  prefabsVerticeConvexo:
+  - {fileID: 9067283276736406444, guid: 826e0ce094af2ef4ea165d018345fad6, type: 3}
+  prefabsVerticeConvexoPiso:
+  - {fileID: 0}
+  yawBaseVerticeConvexo: 0
+  probabilidadParedExterior: 1
+  paredExteriorOffset: 5.5
+  prefabsPisoExterior:
+  - {fileID: 0}
+  probabilidadPisoExterior: 1
+  prefabsTechoExterior:
+  - {fileID: 7616209394652716680, guid: 172947aa289621b478eee9fd2c9d384a, type: 3}
+  probabilidadTechoExterior: 1
+  prefabsEscaleras: []
+  prefabsCentroPozo:
+  - {fileID: 6191032466195235073, guid: f4896c86579af0541b60d273f2f21993, type: 3}
+  probabilidadObjetoPozo: 0.9
+  pasoRotacionPozoGrados: 90
+  salasGrandesPosibles: []
+  orientarSeccionesALadoLibre: 1
+  yawBaseSeccion: 0
+  prefabNPCHabitante: {fileID: 0}
+  prefabCartelBusquedaVivienda: {fileID: 0}
+  radioBusquedaViviendaMacros: 15
+  alturaPistaVivienda: 0
+  habitantesPosibles:
+  - {fileID: 0}
+  generarLucesTecho: 1
+  prefabsLucesTecho:
+  - {fileID: 0}
+  - {fileID: 0}
+  probabilidadLuzTecho: 0.5
+  luzTechoOffset: 5.64
+  luzTechoMargenPared: 2
+  separacionCarrilesTecho: 5.64
+  tuberiaUsaCarrilAleatorio: 0
+  prefabsPasarelaConEscalera:
+  - {fileID: 0}
+  probabilidadEscaleraExtremo: 0.535
+  prefabTramoEscalera: {fileID: 3510117745591299118, guid: dbe785391b33ff344b5120002d3a3966, type: 3}
+  alturaTramoEscalera: 0
+  prefabPasarelaRecta: {fileID: 0}
+  prefabPasarelaFinInvertida: {fileID: 0}
+  prefabsPasarelaConEscaleraInvertida:
+  - {fileID: 2523913992421303615, guid: 34bb5988e10e5be42b7bec806c6cd06d, type: 3}
+  yawExtraPasarelaEscalera: 180
+  invertirEspejoPasarela: 1
+  prefabPasarelaFin: {fileID: 0}
+  yawExtraPasarelaFin: 0
+  prefabPasarelaT: {fileID: 0}
+  prefabPasarelaL: {fileID: 0}
+  pasarelaOffset: 0.5
+  probabilidadPasarela: 0.866
+  pasarelaRotationOffset: 0
+  prefabsObjetoBorde: []
+  probabilidadObjetoBorde: 0.35
+  objetosPorCara: {x: 1, y: 3}
+  anchoFranjaBorde: 2
+  margenFranjaBorde: 1
+  objetoBordeMiraAlPasillo: 0
+  prefabsCierrePasillo:
+  - {fileID: 6799703917082212387, guid: 54c0fa1248c707844b331cf3c408bad5, type: 3}
+  cierreOffset: 0
+  probabilidadCierre: 0.928
+  probabilidadBalcon: 0.2
+  prefabBalcon: {fileID: 0}
+  balconOffset: 0
+  probabilidadTuberia: 0.5
+  prefabsTuberiaRecta1m:
+  - {fileID: 0}
+  prefabsTuberiaRecta2m:
+  - {fileID: 0}
+  prefabsTuberiaRecta5m:
+  - {fileID: 0}
+  prefabsTuberiaCurva90:
+  - {fileID: 0}
+  prefabsTuberiaTapon:
+  - {fileID: 0}
+  alturaTuberia: 19
+  tuberiaOffsetLateral: 0
+  longitudCurvaTuberia: 2
+  yawBaseTuberiaCurva: 0
+  escalaDensidad: 0.2
+  spawnEnVivienda: 0
+  spawnEnCuartelDebug: 1
+  radioBusquedaCuartelDebugMacros: 15
+  posicionSpawn: {x: -58.6, y: 21.4, z: 170.3}
+  jugador: {fileID: 0}
+  puntoSpawnJugador: {fileID: 0}
+  radioVision: 20
+  macroSize: 5
+  usarSemillaAleatoria: 0
+  semillaDelMundo: 1
+  periodoIslas: 9
+  radioIslaChunks: {x: 2, y: 3}
+  probabilidadPuente: 0.75
+  prefabsPuertaBocaVacio: []
+  umbralVacioIsla: 0.25
+  probabilidadIslaColosal: 0.2
+  grosorCascaraColosal: 1
+  pilaresEnSalaColosal: 1
+  cascoColosalSiempreConPielExterior: 0
+  salasPorIsla: {x: 2, y: 4}
+  separacionMinimaSalasChunks: 3
+  probabilidadIslaSinViviendas: 0.08
+  cuartelGarantizadoPorIsla: 1
+  centinelasEntranAViviendas: 0
+  umbralDensidadAlta: 0.5
+  umbralDensidadMedia: 0.3
+  umbralDensidadBaja: 0.2
+  cargarPartidaAlIniciar: 0
+  msPresupuestoBurbuja: 5
+  radioDescarga: 16
+  intervaloDescarga: 3
+  msPresupuestoDescarga: 2
+  descartarCacheAlDescargar: 1
+  maxEntradasCacheCelda: 200000

@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37677d0991331e74ba98f9f2d4462ff9, type: 3}
+  m_Name: NOTA 2
+  m_EditorClassIdentifier: Assembly-CSharp::NotaData
+  titulo: REGISTRO // 07-11-2489 - 2
+  contenido: "Cuando volv\xED... hab\xEDa desaparecido.\n\nSolo encontr\xE9 una nota
+    escrita con ketchup:\n\n\"No me busques.\""
+  autor: Ketchup
+  tieneMision: 0
+  prefabCofre: {fileID: 0}
+  esMisionEncadenada: 0
+  distanciaMisionCeldas: 50
+  materialesRecompensa: []
+  cantidadMateriales: {x: 2, y: 4}
+  notaSiguiente: {fileID: 0}
+  prefabNotaFisica: {fileID: 0}
