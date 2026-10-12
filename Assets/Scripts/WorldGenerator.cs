@@ -287,8 +287,14 @@ public class WorldGenerator : MonoBehaviour
     public bool spawnEnVivienda = true;
     [Tooltip("SOLO DEBUG. ON = arrancás DENTRO del cuartel de centinelas más cercano al origen, ignorando spawnEnVivienda Y el guardado (cargarPartidaAlIniciar se saltea, si no la partida guardada te devolvía a donde estabas). Es exactamente la misma celda que usa RondaCentinelas para spawnear la ronda, así que los centinelas aparecen encima tuyo. Acordate de apagarlo antes de jugar en serio.")]
     public bool spawnEnCuartelDebug = false;
-    [Tooltip("Solo con Spawn En Cuartel Debug. Techo (en macro chunks) de la búsqueda del cuartel desde el origen del WorldGenerator. 1 macro chunk = 100m: si no encuentra ninguno, subilo.")]
+    [Tooltip("SOLO DEBUG. ON = arrancás en la boca de pasillo pegada al POZO VERTICAL (tipo 6) más cercano al origen. Igual que el de cuartel: ignora spawnEnVivienda y el guardado. Si también está prendido el de cuartel, manda el cuartel.")]
+    public bool spawnEnPozoVerticalDebug = false;
+    [Tooltip("SOLO DEBUG. ON = arrancás en el centro de la SALA GRANDE / atrio (tipo 7) más cercana al origen. Igual que el de cuartel: ignora spawnEnVivienda y el guardado. Prioridad: cuartel > pozo vertical > sala grande.")]
+    public bool spawnEnSalaGrandeDebug = false;
+    [Tooltip("Solo con los Spawn ... Debug (cuartel, pozo vertical, sala grande). Techo (en macro chunks) de la búsqueda desde el origen del WorldGenerator. 1 macro chunk = 100m: si no encuentra ninguno, subilo.")]
     public int radioBusquedaCuartelDebugMacros = 15;
+
+    private bool AlgunSpawnDebug => spawnEnCuartelDebug || spawnEnPozoVerticalDebug || spawnEnSalaGrandeDebug;
     [Tooltip("Calculada por DefinirPuntoDeSpawn a partir de lugarDeSpawn. Aleatoria por semilla (respeta usarSemillaAleatoria).")]
     public Vector3 posicionSpawn = new Vector3(-58.6f, 21.4f, 170.3f);
     public Transform jugador;
@@ -513,7 +519,7 @@ public class WorldGenerator : MonoBehaviour
     {
         // El toggle de debug manda sobre el guardado: si no, cargar la partida te devolvía a donde
         // estabas y el spawn en cuartel nunca llegaba a calcularse.
-        if (!spawnEnCuartelDebug && cargarPartidaAlIniciar && SistemaGuardado.Cargar(out int seedGuardada, out Vector3 posGuardada, out rotYGuardada))
+        if (!AlgunSpawnDebug && cargarPartidaAlIniciar && SistemaGuardado.Cargar(out int seedGuardada, out Vector3 posGuardada, out rotYGuardada))
         {
             semillaDelMundo = seedGuardada;
             usarSemillaAleatoria = false;
@@ -769,6 +775,32 @@ public class WorldGenerator : MonoBehaviour
             Debug.LogWarning($"[WorldGenerator] 'Spawn En Cuartel Debug' activo pero no hay ningún cuartel dentro de {radioBusquedaCuartelDebugMacros} macro chunks del origen — spawn normal. Subí el radio o cambiá de semilla.");
         }
 
+        if (spawnEnPozoVerticalDebug)
+        {
+            if (TryEncontrarMacroDeTipo(6, transform.position, radioBusquedaCuartelDebugMacros, out Vector3Int macroPozo))
+            {
+                celdaSpawn = CeldaSpawnJuntoAPozo(macroPozo);
+                FijarSpawnDebug("POZO VERTICAL", "Spawn En Pozo Vertical Debug");
+                Random.state = prev;
+                return;
+            }
+            Debug.LogWarning($"[WorldGenerator] 'Spawn En Pozo Vertical Debug' activo pero no hay ningún pozo vertical dentro de {radioBusquedaCuartelDebugMacros} macro chunks del origen — spawn normal. Subí el radio o cambiá de semilla.");
+        }
+
+        if (spawnEnSalaGrandeDebug)
+        {
+            if (TryEncontrarMacroDeTipo(7, transform.position, radioBusquedaCuartelDebugMacros, out Vector3Int macroSala))
+            {
+                // Piso sólido en ly=0 → se para en ly=1, en el centro (los pilares van en las esquinas).
+                int m = macroSize / 2;
+                celdaSpawn = new Vector3Int(macroSala.x * macroSize + m, macroSala.y * macroSize + 1, macroSala.z * macroSize + m);
+                FijarSpawnDebug("SALA GRANDE", "Spawn En Sala Grande Debug");
+                Random.state = prev;
+                return;
+            }
+            Debug.LogWarning($"[WorldGenerator] 'Spawn En Sala Grande Debug' activo pero no hay ninguna sala grande dentro de {radioBusquedaCuartelDebugMacros} macro chunks del origen — spawn normal. Subí el radio o cambiá de semilla.");
+        }
+
         bool encontrada;
         if (spawnEnVivienda)
         {
@@ -815,6 +847,92 @@ public class WorldGenerator : MonoBehaviour
         }
 
         Random.state = prev;
+    }
+
+    /// <summary>posicionSpawn a partir de celdaSpawn (misma cuenta que el spawn normal) + aviso.</summary>
+    private void FijarSpawnDebug(string lugar, string nombreToggle)
+    {
+        posicionSpawn = transform.position + new Vector3(
+            celdaSpawn.x * cellSize + (cellSize / 2f),
+            celdaSpawn.y * cellSize + 2f,
+            celdaSpawn.z * cellSize + (cellSize / 2f)
+        );
+        Debug.LogWarning($"[WorldGenerator] SPAWN EN {lugar} (DEBUG) · celda {celdaSpawn} · pos {posicionSpawn}. Acordate de apagar '{nombreToggle}'.");
+    }
+
+    /// <summary>
+    /// Celda pegada a la columna del pozo (tipo 6). La columna (centro del macro) tiene la escalera
+    /// adentro, así que no se arranca ahí sino en la boca de pasillo de al lado: CalcularCeldaVacia
+    /// talla esas 4 celdas (centro ± 1 en X/Z) cuando el pozo conecta con el vecino. Primero a la
+    /// altura de pasillo (ly=1), después cualquier piso; si ninguna está abierta, la columna misma.
+    /// </summary>
+    private Vector3Int CeldaSpawnJuntoAPozo(Vector3Int macro)
+    {
+        int m = macroSize / 2;
+        Vector3Int[] lados = { Vector3Int.right, Vector3Int.left, Vector3Int.forward, Vector3Int.back };
+
+        int[] niveles = new int[macroSize];
+        niveles[0] = 1;
+        for (int i = 1, ly = 0; i < macroSize; ly++)
+            if (ly != 1) niveles[i++] = ly;
+
+        foreach (int ly in niveles)
+        {
+            Vector3Int columna = new Vector3Int(macro.x * macroSize + m, macro.y * macroSize + ly, macro.z * macroSize + m);
+            foreach (Vector3Int lado in lados)
+            {
+                Vector3Int c = columna + lado;
+                if (IsCellEmpty(c.x, c.y, c.z)) return c;
+            }
+        }
+
+        Debug.LogWarning($"[WorldGenerator] El pozo del macro {macro} no tiene ninguna boca abierta — spawneando dentro de la columna.");
+        return new Vector3Int(macro.x * macroSize + m, macro.y * macroSize + 1, macro.z * macroSize + m);
+    }
+
+    /// <summary>
+    /// Macro chunk de ese tipo más cercano a `cerca`, abriendo cáscaras de radio creciente (mismo
+    /// recorrido que TryEncontrarSalaCentinela). Para los spawns de debug.
+    /// </summary>
+    private bool TryEncontrarMacroDeTipo(int tipoBuscado, Vector3 cerca, int radioMacros, out Vector3Int macro)
+    {
+        macro = default;
+        Vector3Int c = CeldaAMacroChunk(MundoACelda(cerca));
+        int m = macroSize / 2;
+
+        for (int r = 0; r <= Mathf.Max(0, radioMacros); r++)
+        {
+            float mejorDist = float.MaxValue;
+            Vector3Int mejor = default;
+            bool encontrada = false;
+
+            void Considerar(int mx, int my, int mz)
+            {
+                if (ObtenerTipoMacroChunk(mx, my, mz) != tipoBuscado) return;
+
+                Vector3Int central = new Vector3Int(mx * macroSize + m, my * macroSize + 1, mz * macroSize + m);
+                float d = Vector3.Distance(CeldaACentroMundoPiso(central), cerca);
+                if (d < mejorDist) { mejorDist = d; mejor = new Vector3Int(mx, my, mz); encontrada = true; }
+            }
+
+            for (int mx = c.x - r; mx <= c.x + r; mx++)
+                for (int my = c.y - r; my <= c.y + r; my++)
+                {
+                    if (Mathf.Abs(mx - c.x) == r || Mathf.Abs(my - c.y) == r)
+                    {
+                        for (int mz = c.z - r; mz <= c.z + r; mz++) Considerar(mx, my, mz);
+                    }
+                    else
+                    {
+                        Considerar(mx, my, c.z - r);
+                        if (r > 0) Considerar(mx, my, c.z + r);
+                    }
+                }
+
+            if (encontrada) { macro = mejor; return true; }
+        }
+
+        return false;
     }
 
     private void PosicionarJugadorEnSpawn()

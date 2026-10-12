@@ -113,6 +113,21 @@ public class TooltipManager : MonoBehaviour
             posicionFinal = objetoObjetivo.transform.position + (Vector3.up * distancia);
         }
 
+        PosicionarYMostrar(posicionFinal, mensaje);
+    }
+
+    /// <summary>
+    /// Igual que MostrarTooltip pero en un punto del mundo explícito, para cosas cuyo transform no
+    /// está donde se ven. Ej: la tirolina, cuyo GameObject queda en el origen del mundo y la cuerda
+    /// va de anclaA a anclaB — con MostrarTooltip el cartel aparecía en (0,0,0) y no en la cuerda.
+    /// </summary>
+    public void MostrarTooltipEnPunto(Vector3 puntoMundo, string mensaje)
+    {
+        PosicionarYMostrar(puntoMundo + Vector3.up * distanciaAltura, mensaje);
+    }
+
+    private void PosicionarYMostrar(Vector3 posicionFinal, string mensaje)
+    {
         // 3. Aplicar a la pantalla (Screen Space)
         Vector3 screenPos = Camera.main.WorldToScreenPoint(posicionFinal);
         

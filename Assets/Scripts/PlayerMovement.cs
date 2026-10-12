@@ -22,6 +22,9 @@ public class PlayerMovement : MonoBehaviour
 
     // --- Vuelo (Space para volar) ---
     [Header("Vuelo")]
+    [Tooltip("ON = Space te hace volar (debug). OFF = Space salta normal (fuerzaSaltoBase, frenado por el peso). Se alterna en juego con teclaModoVuelo.")]
+    public bool modoVuelo = true;
+    public KeyCode teclaModoVuelo = KeyCode.F8;
     public float velocidadVueloAscenso = 8f;    // velocidad de ascenso mientras mantienes Space
     public float velocidadVueloCaida = -15f;   // velocidad de caída cuando sueltas Space (gravedad)
     [Tooltip("Multiplicador de velocidad (tanto horizontal como de ascenso) cuando presionas Shift en el aire/volando.")]
@@ -162,6 +165,26 @@ public class PlayerMovement : MonoBehaviour
             danoCaidaActivo = !danoCaidaActivo;
             Debug.Log($"[DEBUG - CHEAT] Daño por caída (Muerte) {(danoCaidaActivo ? "ACTIVADO" : "DESACTIVADO")}");
         }
+
+        if (Input.GetKeyDown(teclaModoVuelo))
+        {
+            modoVuelo = !modoVuelo;
+            Debug.Log($"[DEBUG - CHEAT] Modo vuelo {(modoVuelo ? "ACTIVADO" : "DESACTIVADO (Space = salto)")}");
+        }
+
+        // GetKeyDown se lee acá y no en FixedUpdate: a FPS altos FixedUpdate puede no correr en
+        // el frame exacto del KeyDown y el salto se perdería.
+        if (!modoVuelo && !bloquearSpaceHastaSoltar && !movementLocked && !ModoMenu.Activo && Input.GetKeyDown(KeyCode.Space))
+        {
+            intentarSaltar = true;
+        }
+    }
+
+    /// <summary>Velocidad vertical del salto: la base menos lo que resta la carga, con un piso.</summary>
+    private float VelocidadSalto()
+    {
+        float peso = playerData != null ? playerData.pesoTotal : 0f;
+        return Mathf.Max(fuerzaSaltoBase - peso * factorPesoSalto, fuerzaSaltoMinima);
     }
 
     void FixedUpdate()
@@ -206,8 +229,9 @@ public class PlayerMovement : MonoBehaviour
         float objetivoVel = agachado ? velocidadAgachado
                           : (isSprinting ? velocidadSprintObjetivo : velocidadCaminar);
         
-        // Si está volando/aire y sprintando, aplicar el multiplicador de velocidad
-        if (!enSuelo && Input.GetKey(KeyCode.LeftShift))
+        // Si está volando y sprintando, aplicar el multiplicador de velocidad. Solo en modo vuelo:
+        // en modo salto, Shift + saltar te lanzaría 2.5x más lejos.
+        if (modoVuelo && !enSuelo && Input.GetKey(KeyCode.LeftShift))
         {
             objetivoVel *= multiplicadorVelocidadSprintVuelo;
         }
@@ -218,7 +242,17 @@ public class PlayerMovement : MonoBehaviour
         // 4. VUELO: Space para ascender, soltar Space para caer
         float yVel = rb.linearVelocity.y;
 
-        if (bloquearSpaceHastaSoltar)
+        if (!modoVuelo)
+        {
+            // 4b. SALTO: la gravedad del Rigidbody hace el resto.
+            if (bloquearSpaceHastaSoltar && !Input.GetKey(KeyCode.Space))
+                bloquearSpaceHastaSoltar = false;
+
+            if (intentarSaltar && enSuelo)
+                yVel = VelocidadSalto();
+            intentarSaltar = false;
+        }
+        else if (bloquearSpaceHastaSoltar)
         {
             if (Input.GetKeyUp(KeyCode.Space))
             {

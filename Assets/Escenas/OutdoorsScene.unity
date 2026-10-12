@@ -8914,63 +8914,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 3893626734825298200, guid: aa7e486238d5d3f4f88b1f093a316010, type: 3}
   m_PrefabInstance: {fileID: 6868411244177997806}
   m_PrefabAsset: {fileID: 0}
---- !u!1001 &1641971683
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -44.10882
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -0.052600026
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 13.702662
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
-      propertyPath: m_Name
-      value: LuzParedChica
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: c456beef72e7c8a479be065395e2abb4, type: 3}
 --- !u!4 &1647803053 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4951326360173318014, guid: e60f2a55b15e7b444b24091a9dfb510c, type: 3}
@@ -13671,6 +13614,14 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5329751470378876368, guid: f41cb2a5f0d43704b94d9f973dfdde3a, type: 3}
+      propertyPath: probabilidadLuzTecho
+      value: 0.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 5329751470378876368, guid: f41cb2a5f0d43704b94d9f973dfdde3a, type: 3}
+      propertyPath: usarSemillaAleatoria
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5329751470378876368, guid: f41cb2a5f0d43704b94d9f973dfdde3a, type: 3}
       propertyPath: prefabCartelCoordenadas
       value: 
       objectReference: {fileID: 620712569}
@@ -15785,7 +15736,6 @@ SceneRoots:
   - {fileID: 2030675237}
   - {fileID: 494134384}
   - {fileID: 2978625588853155417}
-  - {fileID: 1641971683}
   - {fileID: 3008746367398150995}
   - {fileID: 2656694297108793395}
   - {fileID: 4551813970104640689}

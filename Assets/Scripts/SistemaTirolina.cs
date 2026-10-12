@@ -514,8 +514,10 @@ public class SistemaTirolina : MonoBehaviour
             Tirolina t = hit.collider.GetComponentInParent<Tirolina>();
             if (t != null)
             {
+                // En el punto de la cuerda que estás mirando (no en t.gameObject: ese queda en el
+                // origen del mundo, y el cartel aparecía lejos o fuera de pantalla).
                 if (TooltipManager.Instance != null)
-                    TooltipManager.Instance.MostrarTooltip(t.gameObject, "[E] Tirolina");
+                    TooltipManager.Instance.MostrarTooltipEnPunto(t.PuntoMasCercano(hit.point), $"[{teclaEnganche}] Agarrar");
 
                 if (Input.GetKeyDown(teclaEnganche))
                 {

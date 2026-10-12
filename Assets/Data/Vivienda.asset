@@ -13,6 +13,18 @@ MonoBehaviour:
   m_Name: Vivienda
   m_EditorClassIdentifier: Assembly-CSharp::RoomData
   nombreSala: Sala
+  esCuartelCentinelas: 0
+  pesoAparicion: 1
   lootPosible: []
   cantidadLoot: {x: 1, y: 3}
   mobiliario: []
+  prefabsCentrales: []
+  seccionAgua: {fileID: 0}
+  seccionComida: {fileID: 0}
+  seccionBateria: {fileID: 0}
+  seccionDormir: {fileID: 0}
+  seccionAlmacenamiento: {fileID: 0}
+  generarLuces: 1
+  prefabsLuces: []
+  cantidadLuces: {x: 0, y: 2}
+  luzOffsetTecho: 0.05

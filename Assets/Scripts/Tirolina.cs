@@ -83,6 +83,19 @@ public class Tirolina : MonoBehaviour
         box.size = new Vector3(0.6f, 0.6f, largo);
     }
 
+    /// <summary>
+    /// Punto de la cuerda (segmento A–B) más cercano a p. El raycast pega en la cara del collider,
+    /// que está 0.3 m afuera de la cuerda; esto lo devuelve a la cuerda misma.
+    /// </summary>
+    public Vector3 PuntoMasCercano(Vector3 p)
+    {
+        Vector3 ab = anclaB - anclaA;
+        float largoCuadrado = ab.sqrMagnitude;
+        if (largoCuadrado < 0.0001f) return anclaA;
+        float t = Mathf.Clamp01(Vector3.Dot(p - anclaA, ab) / largoCuadrado);
+        return anclaA + ab * t;
+    }
+
     /// <summary>Extremo más cercano a una posición (desde ahí arrancas a deslizarte).</summary>
     public Vector3 ExtremoCercano(Vector3 desde)
     {
