@@ -1,0 +1,37 @@
+# Reglas y Directrices de Desarrollo de Inteligencia Artificial - In Side Us
+
+Este archivo contiene las directivas fundamentales para que cualquier modelo de IA mantenga la cohesión y las convenciones de diseño del proyecto "In Side Us".
+
+---
+
+## 1. Convenciones Generales del Código
+- **Idioma:** Todos los comentarios en el código, documentación e información del Inspector de Unity deben escribirse en **Español**.
+- **Motor:** Unity 3D con C#.
+- **Estilo:** Mantener nombres descriptivos de variables y métodos en español o camelCase mixto según corresponda al código existente.
+
+---
+
+## 2. Sistema de Supervivencia y Tiempo Personalizado
+- **Días de 40 Horas:** La duración del ciclo de día/noche (horas de juego) está configurada a **40 horas** (no 24).
+- **Calendario Simplificado:** No se implementan meses. El sistema calcula directamente el día del año (`diaDelAnio` de 1 a 365) y avanza el año (`anioActual`) indefinidamente al superar los 365 días.
+- **HUD y Batería del Casco:**
+  - Si la batería (`energiaElectrica`) está por encima de 15f, la interfaz se desvanece suavemente.
+  - Si está entre 0f y 15f, se simula un fallo eléctrico ("glitch") con parpadeos.
+  - Si llega a 0f, el HUD se apaga por completo.
+
+---
+
+## 3. Arquitectura del Inventario y Objetos (`ItemData`)
+- **Estructura de Items (Opción B - Herencia):**
+  - No añadir variables específicas de comida, agua o herramientas directamente a la clase base `ItemData`.
+  - Utilizar **herencia de ScriptableObjects** para crear tipos especializados.
+  - **Clase Base:** `ItemData : ScriptableObject` (nombre, peso, tamaño, icono).
+  - **Consumibles:** `ConsumibleData : ItemData` (restaurarComida, restaurarAgua, restaurarBateria).
+  - **Herramientas/Equipamiento:** Futuros scripts como `HerramientaData : ItemData`.
+
+---
+
+## 4. Comportamiento Físico vs Interfaz (UI)
+- **Mecánicas en el Mundo:** Todo comportamiento que interactúe físicamente colocando objetos en la escena 3D (por ejemplo, anclajes de escalada con etiqueta `"Escalada"`) **debe restringirse exclusivamente a cuando el inventario esté CERRADO** (`isInventoryOpen == false`).
+- **Mecánicas en la UI:** Cuando el inventario esté ABIERTO (`isInventoryOpen == true`), presionar Click Derecho o la tecla `R` sobre un objeto sostenido **solo debe rotarlo** para acomodarlo en la cuadrícula de la mochila. Nunca debe disparar rayos físicos ni colocar el objeto en el mundo.
+- **Rendimiento UI Flotante (Tooltips 3D):** NUNCA colocar un componente `Canvas` por cada objeto interactuable en la escena. Se debe usar un único Canvas global en modo World Space que viaje matemáticamente hacia las coordenadas del objeto mirado (`hit.point` o transformaciones vacías de referencia).
