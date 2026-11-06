@@ -99,7 +99,7 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("LEGACY: solo se usa en Salas Chicas que NO tienen RoomData asignada. No tiene nada que ver con los pozos verticales — eso es prefabsCentroPozo.")]
     public GameObject[] prefabsEscaleras;
 
-    [Tooltip("Objetos que pueden aparecer en el centro de cada celda de un POZO VERTICAL (tipo 6): escaleras, andamios, tubos, lo que sea. Se sortea uno POR CELDA, así que una columna puede mezclar prefabs distintos entre nivel y nivel. El pozo talla una columna de 1x1 celda (lx=2, lz=2) a todas las alturas, así que el objeto va centrado y apoyado en el piso de su celda.")]
+    [Tooltip("UN SOLO array para todos los objetos del POZO VERTICAL (tipo 6). Se sortea uno POR CELDA.\n\nCada prefab se comporta según tenga o no marcadores ParedPozo:\n· CON marcadores: declara qué lados necesitan pared. Se usa SOLO en celdas que tengan exactamente esas paredes, girado de a 90° para que calcen. Nunca se pone donde no calza.\n· SIN marcadores: genérico. Va en cualquier pozo con giro al azar (ver Paso Rotacion Pozo Grados). Es el respaldo cuando ningún prefab con marcadores calza.")]
     public GameObject[] prefabsCentroPozo;
 
     [Tooltip("Probabilidad de que una celda de pozo reciba objeto. Se tira POR CELDA: con 0.7 vas a ver columnas con huecos. 0 = apagado (ningún pozo lleva nada), 1 = todas las celdas llevan. OJO: el pozo central de cada isla es su esqueleto vertical — si acá poné un valor bajo, puede tocarte una isla sin forma de subir a pie y vas a depender del rapel/tirolina.")]
@@ -108,6 +108,12 @@ public class WorldGenerator : MonoBehaviour
 
     [Tooltip("Paso (en grados) del giro aleatorio de los objetos del pozo. SOLO gira en Y: nunca se inclinan.\n\n90 = cae encarado a una de las 4 paredes. Como el pozo es cuadrado, una escalera queda siempre apoyada contra un muro — desordenado pero coherente.\n\n0 = giro libre 360°, más caótico, pero una escalera puede quedar en diagonal sin apoyarse en nada.\n\nTambién sirven 180 (dos orientaciones) o 45 (ocho).")]
     public float pasoRotacionPozoGrados = 90f;
+
+    [Header("Pozo: variantes según paredes alrededor")]
+    [Tooltip("ON = los prefabs con marcadores ParedPozo se ubican según las paredes reales de cada celda (ver Prefabs Centro Pozo). OFF = todos se tratan como genéricos, con giro al azar.")]
+    public bool pozoSegunParedes = true;
+    [Tooltip("Log por cada celda de pozo: qué paredes detectó, qué declara el prefab elegido y con qué giro lo puso. Para comparar con lo que ves en pantalla.")]
+    public bool logPozoParedes = true;
 
     [Header("Datos de Salas (Loot)")]
     [Tooltip("Se cargan automáticamente todos los RoomData en Resources/RoomData/ en Awake. Si dejás algo asignado a mano acá, se respeta y NO se sobreescribe.")]
@@ -2192,7 +2198,11 @@ public class WorldGenerator : MonoBehaviour
     private void ProcesarPuntosSpawnItemDePared(GameObject instancia, Vector3Int celda, Vector3 pos, Vector3 normalInterior)
     {
         if (instancia == null) return;
-        if (instancia.GetComponentInChildren<PuntoSpawnItem>(true) == null) return; // caso normal: pared pelada
+        PuntoSpawnItem[] puntosPared = instancia.GetComponentsInChildren<PuntoSpawnItem>(true);
+        if (puntosPared.Length == 0) return; // caso normal: pared pelada
+
+        // El filtro de pozos ya no vive acá: lo hace ResolverPuntoSpawnItem mirando la posición REAL
+        // de cada punto (EsPosicionDePozoOSinPiso), que cubre también pasarelas y objetos anidados.
 
         int hash = semillaDelMundo
                  + Mathf.RoundToInt(pos.x) * 73856
@@ -2288,10 +2298,51 @@ public class WorldGenerator : MonoBehaviour
     /// PuntoSpawnItem adentro, se resuelven en la misma pasada. Devuelve true si spawneó algo,
     /// para que el llamador (el grupo excluyente) sepa que ya no hace falta seguir probando.
     /// </summary>
+    /// <summary>
+    /// ¿Esta posición cae en la columna de un pozo vertical, o en una celda vacía sin piso abajo?
+    /// La columna del pozo es lx==2 && lz==2 de un macro chunk tipo 6 (la única parte hueca del
+    /// chunk, a todas las alturas). "Sin piso" = la celda y la de abajo están vacías: lo que se
+    /// ponga ahí queda flotando.
+    ///
+    /// No se bloquea por tener hueco ARRIBA: eso descartaría también salas de doble altura y
+    /// balcones, donde los props son legítimos.
+    /// </summary>
+    private bool EsPosicionDePozoOSinPiso(Vector3 posMundo, out string motivo)
+    {
+        Vector3Int c = MundoACelda(posMundo);
+        Vector3Int mc = CeldaAMacroChunk(c);
+        int lx = (c.x % macroSize + macroSize) % macroSize;
+        int lz = (c.z % macroSize + macroSize) % macroSize;
+
+        if (lx == 2 && lz == 2 && ObtenerTipoMacroChunk(mc.x, mc.y, mc.z) == 6)
+        {
+            motivo = "columna de pozo vertical";
+            return true;
+        }
+        if (IsCellEmpty(c.x, c.y, c.z) && IsCellEmpty(c.x, c.y - 1, c.z))
+        {
+            motivo = "sin piso abajo";
+            return true;
+        }
+        motivo = null;
+        return false;
+    }
+
     private bool ResolverPuntoSpawnItem(PuntoSpawnItem punto, Vector3Int celda)
     {
         if (punto == null || !punto.gameObject.activeSelf) return false;
         if (punto.itemsPosibles == null || punto.itemsPosibles.Length == 0) return false;
+
+        // Nada de items en un POZO VERTICAL ni donde no hay piso. Se mira la posición REAL del punto
+        // (no la celda dueña del prefab), así cubre cualquier fuente: paredes, pasarelas, objetos
+        // anidados. Es lo que evita el container flotando en el medio del pozo.
+        if (EsPosicionDePozoOSinPiso(punto.transform.position, out string motivo))
+        {
+            if (logPozoParedes)
+                Debug.Log($"[PuntoSpawn] '{punto.name}' en {MundoACelda(punto.transform.position)} BLOQUEADO: {motivo}.");
+            punto.gameObject.SetActive(false);
+            return false;
+        }
 
         // Roll 1: ¿este punto genera algo?
         if (Random.value > punto.probabilidadSpawn) { punto.gameObject.SetActive(false); return false; }
@@ -2307,6 +2358,17 @@ public class WorldGenerator : MonoBehaviour
         if (elegido == null) return false;
 
         GameObject go = Instantiate(elegido, punto.transform.position, punto.transform.rotation, transform);
+
+        // Debug: el nombre dice de dónde salió. Si algo aparece donde no debe, lo seleccionás en la
+        // Hierarchy y ya sabés qué prefab lo trajo y en qué celda, sin adivinar.
+        if (logPozoParedes)
+        {
+            // El prefab de origen es el ancestro que cuelga directo del WorldGenerator (todo se
+            // instancia como hijo suyo); transform.root daría el propio WorldGenerator.
+            Transform raizOrigen = punto.transform;
+            while (raizOrigen.parent != null && raizOrigen.parent != transform) raizOrigen = raizOrigen.parent;
+            go.name = $"{elegido.name} ← {raizOrigen.name} / {punto.name} · celda {MundoACelda(punto.transform.position)}";
+        }
 
         // RECURSIVO: mismo Random.State (ya sembrado por el caller original), así que la cadena
         // entera sigue siendo determinista por semilla sin que cada eslabón siembre el suyo.
@@ -2891,22 +2953,39 @@ public class WorldGenerator : MonoBehaviour
         //
         // Sorteo POR CELDA (no por chunk): tanto si hay objeto como cuál es. Por eso una misma
         // columna puede mezclar prefabs y tener huecos — es a propósito.
-        if (tipo == 6 && lx == 2 && lz == 2
-            && prefabsCentroPozo != null && prefabsCentroPozo.Length > 0
-            && probabilidadObjetoPozo > 0f)
+        if (tipo == 6 && lx == 2 && lz == 2 && probabilidadObjetoPozo > 0f)
         {
             int hashPozo = semillaDelMundo + x * 42043 + y * 15683 + z * 70237;
             Random.State estadoPozo = Random.state;
             Random.InitState(hashPozo);
             bool hayObjeto = Random.value < probabilidadObjetoPozo;
-            GameObject prefabPozo = hayObjeto
-                ? prefabsCentroPozo[Random.Range(0, prefabsCentroPozo.Length)]
-                : null;
+
+            // Variante según las paredes que REALMENTE rodean la celda. El prefab genérico está
+            // armado para 4 paredes, y donde el pozo se abre a un pasillo las piezas sujetas a la
+            // pared faltante quedaban flotando.
+            GameObject prefabPozo = null;
+            float yawPozo = 0f;
+            bool resueltoPorParedes = false;
+            if (hayObjeto && pozoSegunParedes)
+                resueltoPorParedes = TryElegirPozoSegunParedes(x, y, z, out prefabPozo, out yawPozo);
+
+            // Si no calzó ningún prefab con paredes, se sortea entre los GENÉRICOS (sin marcadores
+            // ParedPozo) del mismo array. ⚠️ Nunca entre los marcados: un prefab hecho para dos
+            // paredes de esquina puesto con giro al azar es exactamente lo que dejaba piezas
+            // colgando hacia el pasillo.
+            if (hayObjeto && !resueltoPorParedes && prefabsCentroPozo != null)
+            {
+                var genericos = new List<GameObject>();
+                foreach (GameObject p in prefabsCentroPozo)
+                    if (p != null && MascaraParedesDePrefab(p) == 0) genericos.Add(p);
+                if (genericos.Count > 0)
+                    prefabPozo = genericos[Random.Range(0, genericos.Count)];
+            }
 
             // Giro SOLO en Y (nunca se inclinan). Se tira dentro del mismo bloque sembrado, así
-            // que la rotación también es determinista por semilla.
-            float yawPozo = 0f;
-            if (prefabPozo != null)
+            // que la rotación también es determinista por semilla. Las variantes por paredes ya
+            // traen su giro calculado: girarlas al azar las despegaría de los muros.
+            if (prefabPozo != null && !resueltoPorParedes)
             {
                 if (pasoRotacionPozoGrados > 0f)
                 {
@@ -5867,6 +5946,158 @@ public class WorldGenerator : MonoBehaviour
     /// la estructura se muestra tal cual — sin paredes contenedoras que encapsulen nada.
     /// Las estructuras conservan su piel propia (sus caras dan a pasillos/salas, no al void).
     /// </summary>
+    // Direcciones horizontales en orden HORARIO visto desde arriba: girar el prefab +90° en Y lleva
+    // cada dirección a la siguiente (+Z → +X → -Z → -X). Es lo que permite girar una máscara de
+    // paredes con un simple corrimiento de bits.
+    private static readonly Vector3Int[] DireccionesPozo =
+    {
+        new Vector3Int(0, 0, 1),   // bit 0: +Z
+        new Vector3Int(1, 0, 0),   // bit 1: +X
+        new Vector3Int(0, 0, -1),  // bit 2: -Z
+        new Vector3Int(-1, 0, 0),  // bit 3: -X
+    };
+
+    /// <summary>
+    /// Elige el objeto del pozo según qué lados de la celda tienen pared, y calcula el giro para
+    /// que las piezas sujetas del prefab queden contra paredes que existen. Llamar DENTRO del bloque
+    /// con el Random ya sembrado por celda: los sorteos son deterministas por semilla.
+    ///
+    /// Hay pared de un lado cuando la celda vecina es sólida y la cara no da al vacío — el mismo
+    /// criterio con el que se instancian las paredes. Devuelve false si no hay variante para este
+    /// caso (lista vacía, o la celda no tiene ninguna pared): el que llama cae al genérico.
+    /// </summary>
+    private bool TryElegirPozoSegunParedes(int x, int y, int z, out GameObject prefab, out float yaw)
+    {
+        prefab = null;
+        yaw = 0f;
+
+        int mascara = 0;
+        for (int d = 0; d < 4; d++)
+        {
+            Vector3Int v = DireccionesPozo[d];
+            int nx = x + v.x, nz = z + v.z;
+            bool hayPared = !IsCellEmpty(nx, y, nz) && !CaraDaAlVacio(true, x, y, z, nx, y, nz);
+            if (hayPared) mascara |= 1 << d;
+        }
+
+        if (mascara == 0) return false; // 0 paredes: no hay de dónde sujetar nada
+
+        // Cada prefab declara sus paredes con marcadores ParedPozo (los que no tienen son genéricos y
+        // no entran acá). Primero se buscan los que, girados de a 90°, calzan EXACTO con las paredes
+        // reales. Si no hay ninguno, RESPALDO: los que necesitan un subconjunto de esas paredes —
+        // todas sus paredes existen, así que nada queda flotando; solo sobra muro sin usar. Entre
+        // esos se prefieren los que usan MÁS paredes (los que mejor llenan la celda).
+        var candidatos = new List<(GameObject prefab, int giro)>();
+        AgregarCandidatosPozo(prefabsCentroPozo, mascara, candidatos, exacto: true);
+        if (candidatos.Count == 0)
+            AgregarCandidatosPozo(prefabsCentroPozo, mascara, candidatos, exacto: false);
+        if (candidatos.Count == 0) return false;
+
+        var elegido = candidatos[Random.Range(0, candidatos.Count)];
+        prefab = elegido.prefab;
+        yaw = elegido.giro * 90f;
+
+        if (logPozoParedes)
+        {
+            Debug.Log($"[Pozo] celda ({x},{y},{z}) · paredes REALES: {NombresLados(mascara)} " +
+                      $"(vecinos: +Z {(IsCellEmpty(x, y, z + 1) ? "hueco" : "sólido")}, +X {(IsCellEmpty(x + 1, y, z) ? "hueco" : "sólido")}, " +
+                      $"-Z {(IsCellEmpty(x, y, z - 1) ? "hueco" : "sólido")}, -X {(IsCellEmpty(x - 1, y, z) ? "hueco" : "sólido")}) · " +
+                      $"prefab '{prefab.name}' declara {NombresLados(MascaraParedesDePrefab(prefab))} · giro {yaw:0}°");
+        }
+        return true;
+    }
+
+    private static string NombresLados(int mascara)
+    {
+        string[] n = { "+Z", "+X", "-Z", "-X" };
+        var partes = new List<string>();
+        for (int d = 0; d < 4; d++) if ((mascara & (1 << d)) != 0) partes.Add(n[d]);
+        return partes.Count == 0 ? "ninguna" : string.Join(",", partes);
+    }
+
+    // Máscara de paredes de cada prefab de pozo, leída de sus marcadores. Cacheada: los prefabs no
+    // cambian en Play, y recorrer sus hijos en cada celda sería trabajo tirado.
+    private readonly Dictionary<GameObject, int> cacheMascaraPozo = new Dictionary<GameObject, int>();
+
+    /// <summary>
+    /// Qué lados del prefab tienen pared, en espacio LOCAL del prefab (bits como DireccionesPozo).
+    /// Sale de los marcadores ParedPozo: cada uno aporta el lado de su eje dominante. Sin
+    /// marcadores, devuelve 0: el prefab es GENÉRICO.
+    /// </summary>
+    private int MascaraParedesDePrefab(GameObject prefab)
+    {
+        if (cacheMascaraPozo.TryGetValue(prefab, out int cached)) return cached;
+
+        int mascara = 0;
+        ParedPozo[] marcadores = prefab.GetComponentsInChildren<ParedPozo>(true);
+        Transform raiz = prefab.transform;
+        foreach (ParedPozo m in marcadores)
+        {
+            Vector3 local = raiz.InverseTransformPoint(m.transform.position);
+            if (Mathf.Abs(local.x) < 0.01f && Mathf.Abs(local.z) < 0.01f)
+            {
+                Debug.LogWarning($"[Pozo] El marcador '{m.name}' de '{prefab.name}' está en el centro: no se sabe a qué lado apunta. Corrélo hacia su pared.");
+                continue;
+            }
+            int bit = Mathf.Abs(local.z) >= Mathf.Abs(local.x)
+                ? (local.z > 0f ? 0 : 2)   // +Z / -Z
+                : (local.x > 0f ? 1 : 3);  // +X / -X
+            mascara |= 1 << bit;
+        }
+        // Sin marcadores → 0 = prefab GENÉRICO: va en cualquier pozo, con giro al azar.
+
+        if (logPozoParedes)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (ParedPozo m in marcadores)
+                sb.Append($" '{m.name}' local {raiz.InverseTransformPoint(m.transform.position):F1};");
+            Debug.Log($"[Pozo] prefab '{prefab.name}': {marcadores.Length} marcador(es) →{sb} " +
+                      $"= {NombresLados(mascara)}. Raíz del prefab con rotación {raiz.localEulerAngles:F0}.");
+        }
+
+        cacheMascaraPozo[prefab] = mascara;
+        return mascara;
+    }
+
+    private void AgregarCandidatosPozo(GameObject[] lista, int mascaraReal,
+                                       List<(GameObject prefab, int giro)> candidatos, bool exacto)
+    {
+        if (lista == null) return;
+        int mejorCantidad = 0; // solo para el modo subconjunto: cuántas paredes usa el mejor
+        foreach (GameObject p in lista)
+        {
+            if (p == null) continue;
+            int patron = MascaraParedesDePrefab(p);
+            if (patron == 0) continue; // genérico: no compite acá, se usa solo como respaldo
+            int cantidad = ContarParedes(patron);
+            // Girar +90° en Y lleva cada lado al siguiente en orden horario (+Z→+X→-Z→-X), que en la
+            // máscara es un corrimiento circular de un bit. Con patrones simétricos calza más de un
+            // giro: entran todos y se sortea, así hay variedad.
+            for (int k = 0; k < 4; k++)
+            {
+                int girado = ((patron << k) | (patron >> (4 - k))) & 0b1111;
+                bool calza = exacto
+                    ? girado == mascaraReal
+                    : (girado & ~mascaraReal) == 0; // todas sus paredes existen en la celda
+                if (!calza) continue;
+
+                if (!exacto)
+                {
+                    if (cantidad < mejorCantidad) continue;
+                    if (cantidad > mejorCantidad) { candidatos.Clear(); mejorCantidad = cantidad; }
+                }
+                candidatos.Add((p, k));
+            }
+        }
+    }
+
+    private static int ContarParedes(int mascara)
+    {
+        int n = 0;
+        for (int d = 0; d < 4; d++) if ((mascara & (1 << d)) != 0) n++;
+        return n;
+    }
+
     private bool CaraDaAlVacio(bool actualVacia, int x, int y, int z, int nx, int ny, int nz)
     {
         // EXCEPCIÓN: la cáscara de una Sala Colosal sí se recubre contra el vacío. Es el casco de
