@@ -140,7 +140,7 @@ public class WorldGenerator : MonoBehaviour
     public GameObject prefabCartelBusquedaVivienda;
     [Tooltip("Radio de búsqueda en macro chunks (horizontal) donde cada vivienda puede 'creer' que está la vecina que le toca buscar.")]
     public int radioBusquedaViviendaMacros = 15;
-    [Tooltip("Lo mismo pero en VERTICAL. Va aparte del horizontal porque el volumen crece al cubo: con un radio grande en los tres ejes la búsqueda se vuelve carísima y además te manda a viviendas absurdamente lejos.\n\n⚠️ NO lo bajes de radioIslaChunks.y * 2 + 1. Si es menor que la altura de una isla, las viviendas de tu propia isla quedan fuera de alcance y nadie tiene a quién buscar — separacionMinimaSalasChunks las empuja hacia arriba justamente porque a lo ancho no entran.")]
+    [Tooltip("Lo mismo pero en VERTICAL. Va aparte del horizontal porque el volumen crece al cubo: con un radio grande en los tres ejes la búsqueda se vuelve carísima y además te manda a viviendas absurdamente lejos.\n\n⚠️ Si es menor que radioVerticalIslaChunks.y * 2 + 1 se sube solo a ese valor (la altura de la isla más alta). Si es menor que la altura de una isla, las viviendas de tu propia isla quedan fuera de alcance y nadie tiene a quién buscar — separacionMinimaSalasChunks las empuja hacia arriba justamente porque a lo ancho no entran.")]
     public int radioYBusquedaViviendaMacros = 5;
     [Tooltip("Loguea un aviso cuando una vivienda NO encuentra pareja, con cuántas salas tipo 1 vio en el rango y cuántas descartó por ser cuartel. Es lo que distingue 'no hay salas cerca' de 'hay salas pero todas son cuartel'.")]
     public bool logBusquedaVivienda = true;
@@ -418,6 +418,13 @@ public class WorldGenerator : MonoBehaviour
     public int periodoIslas = 10;
     [Tooltip("Radio de cada isla en macro chunks (min/max, aleatorio por isla). Radio 2 = estructura de ~500m de lado.")]
     public Vector2Int radioIslaChunks = new Vector2Int(1, 2);
+    [Tooltip("Período VERTICAL de las capas de islas, en macro chunks (va aparte de periodoIslas, que queda solo para X/Z). 8 = una capa cada 800m. Más chico = capas más juntas, menos vacío entre una y otra. La isla más alta posible mide periodoIslasVertical - 1 chunks, así siempre queda al menos 1 chunk (100m) de vacío entre capas.")]
+    [Min(3)]
+    public int periodoIslasVertical = 8;
+    [Tooltip("Radio VERTICAL de cada isla en macro chunks (min/max, aleatorio por isla). Va aparte del horizontal (radioIslaChunks) para poder hacer islas más altas que anchas: radio 3 = 7 chunks = 700m de alto. Se recorta solo para que la isla entre en periodoIslasVertical. Con (3,3) y periodoIslasVertical 8, todas las islas miden 700m y entre capas queda siempre 100m de vacío; bajar el mínimo da alturas variadas pero huecos más grandes (hasta 300m con (2,3)).")]
+    public Vector2Int radioVerticalIslaChunks = new Vector2Int(3, 3);
+    [Tooltip("ON = las islas de una misma columna (mismo X/Z de región) quedan una ENCIMA de otra, y la columna-pozo central sigue por el vacío de isla a isla: se puede bajar por el pozo entre capas, y si te caés del borde hay una isla abajo. OFF = cada capa sortea su X/Z por separado y el pozo termina en la base de su isla (el mundo viejo).")]
+    public bool islasApiladas = true;
     [Range(0f, 1f)]
     [Tooltip("Probabilidad de que exista puente entre islas vecinas (por eje X y Z). Lo que no tiene puente directo obliga a rodear por otra isla... o a rapelear. 'A veces tenés suerte.'")]
     public float probabilidadPuente = 0.75f;
@@ -688,7 +695,7 @@ public class WorldGenerator : MonoBehaviour
 
         List<Vector3Int> candidatos = new List<Vector3Int>();
         for (int mx = 0; mx < periodoIslas; mx++)
-            for (int my = 0; my < periodoIslas; my++)
+            for (int my = 0; my < PeriodoVertical; my++)
                 for (int mz = 0; mz < periodoIslas; mz++)
                 {
                     int tipo = ObtenerTipoMacroChunk(mx, my, mz);
@@ -915,6 +922,9 @@ public class WorldGenerator : MonoBehaviour
             void Considerar(int mx, int my, int mz)
             {
                 if (ObtenerTipoMacroChunk(mx, my, mz) != tipoBuscado) return;
+                // El tramo de pozo que cruza el vacío entre islas apiladas no tiene bocas ni piso:
+                // spawnear ahí es caer por la columna hasta la isla de abajo.
+                if (EsColumnaPozoEnVacio(mx, my, mz)) return;
 
                 Vector3Int central = new Vector3Int(mx * macroSize + m, my * macroSize + 1, mz * macroSize + m);
                 float d = Vector3.Distance(CeldaACentroMundoPiso(central), cerca);
@@ -1665,14 +1675,14 @@ public class WorldGenerator : MonoBehaviour
         if (!EnIsla(macro.x, macro.y, macro.z)) return false;
 
         Vector3Int region = RegionDeChunk(macro.x, macro.y, macro.z);
-        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out _);
+        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out int radioY, out _);
 
         List<Vector3Int> pisables = new List<Vector3Int>();
 
         for (int intento = 0; intento < Mathf.Max(1, intentos); intento++)
         {
             int mx = centro.x + Random.Range(-radio, radio + 1);
-            int my = centro.y + Random.Range(-radio, radio + 1);
+            int my = centro.y + Random.Range(-radioY, radioY + 1);
             int mz = centro.z + Random.Range(-radio, radio + 1);
             if (!EnIsla(mx, my, mz)) continue;
 
@@ -1889,7 +1899,12 @@ public class WorldGenerator : MonoBehaviour
             int tipoPuente = TipoPuente(mx, my, mz);
 
             if (!enIsla)
-                return tipoPuente != 0 ? tipoPuente : 9;
+            {
+                if (tipoPuente != 0) return tipoPuente;
+                // Islas apiladas: la columna-pozo sigue por el vacío hasta la isla de arriba.
+                if (EsColumnaPozoEnVacio(mx, my, mz)) return 6;
+                return 9;
+            }
 
             // 0) SALA COLOSAL: esta isla no se subdivide en nada — su volumen ENTERO es una sola
             //    sala. Se decide antes que la columna-pozo, las lanes y la porosidad: ninguno de
@@ -1902,11 +1917,8 @@ public class WorldGenerator : MonoBehaviour
             // 1) Columna central = POZO vertical (tipo 6): el "shaft" del monolito. Conecta
             //    todos los niveles de la isla entre sí y desemboca en el nivel base, donde
             //    corren los puentes. Desde cualquier piso, encontrás la columna → bajás → salís.
-            int pIsla = Mathf.Max(3, periodoIslas);
-            Vector3Int centroIsla = CentroIsla(
-                Mathf.FloorToInt((float)mx / pIsla),
-                Mathf.FloorToInt((float)my / pIsla),
-                Mathf.FloorToInt((float)mz / pIsla), out _, out _);
+            Vector3Int regionIsla = RegionDeChunk(mx, my, mz);
+            Vector3Int centroIsla = CentroIsla(regionIsla.x, regionIsla.y, regionIsla.z, out _, out _);
             if (mx == centroIsla.x && mz == centroIsla.z) return 6;
 
             // 2) Las lanes de puente ATRAVIESAN la isla a nivel base hasta la columna central:
@@ -1935,10 +1947,6 @@ public class WorldGenerator : MonoBehaviour
             // 4) COHERENCIA: si la porosidad dejó este chunk AISLADO del esqueleto de la isla
             //    (sin cadena de vecinos hasta la columna-pozo/lanes), se descarta → void.
             //    Nada de pedazos de pasillo flotando sueltos en la nada.
-            Vector3Int regionIsla = new Vector3Int(
-                Mathf.FloorToInt((float)mx / pIsla),
-                Mathf.FloorToInt((float)my / pIsla),
-                Mathf.FloorToInt((float)mz / pIsla));
             if (!ChunksConectadosDeIsla(regionIsla).Contains(new Vector3Int(mx, my, mz))) return 9;
 
             // 5) BORDE DE ISLA → SOLO PASILLOS: los chunks de estructura que tocan el void no
@@ -2657,7 +2665,9 @@ public class WorldGenerator : MonoBehaviour
         //     por más que subieras salasPorIsla.
         //
         // Con el default (5) se cubre la altura completa de una isla desde cualquier punto de ella.
-        int radioY = Mathf.Max(2, radioYBusquedaViviendaMacros);
+        // Nunca menos que la altura de la isla más alta (radioVerticalIslaChunks): con islas altas el
+        // valor del Inspector puede quedar corto y las viviendas de arriba serían inalcanzables.
+        int radioY = Mathf.Max(Mathf.Max(2, radioYBusquedaViviendaMacros), 2 * radioVerticalIslaChunks.y + 1);
 
         // Cáscaras Chebyshev crecientes: nos quedamos con la PRIMERA cáscara que tenga
         // viviendas (las más cercanas). Sortear entre todo el volumen del radio hacía que
@@ -5791,11 +5801,11 @@ public class WorldGenerator : MonoBehaviour
         // El objetivo probablemente cae en el vacío → ajustarlo a la isla de la región
         // del objetivo (siempre existe una) antes de buscar piso.
         {
-            int p = Mathf.Max(3, periodoIslas);
             int cmx = Mathf.FloorToInt((float)objetivo.x / macroSize);
             int cmy = Mathf.FloorToInt((float)objetivo.y / macroSize);
             int cmz = Mathf.FloorToInt((float)objetivo.z / macroSize);
-            Vector3Int centro = CentroIsla(Mathf.FloorToInt((float)cmx / p), Mathf.FloorToInt((float)cmy / p), Mathf.FloorToInt((float)cmz / p), out _, out _);
+            Vector3Int regionObjetivo = RegionDeChunk(cmx, cmy, cmz);
+            Vector3Int centro = CentroIsla(regionObjetivo.x, regionObjetivo.y, regionObjetivo.z, out _, out _);
             objetivo = new Vector3Int(centro.x * macroSize + 2, centro.y * macroSize + 1, centro.z * macroSize + 2);
         }
 
@@ -5912,32 +5922,73 @@ public class WorldGenerator : MonoBehaviour
     /// </summary>
     private Vector3Int CentroIsla(int rx, int ry, int rz, out int radio, out bool esCaja)
     {
+        return CentroIsla(rx, ry, rz, out radio, out _, out esCaja);
+    }
+
+    /// <summary>
+    /// Igual, con el radio VERTICAL aparte (radioY): las islas pueden ser más altas que anchas.
+    /// La isla ocupa ry*pY .. ry*pY + 2*radioY en Y, así que con radioY ≤ (pY-2)/2 siempre queda
+    /// al menos un chunk de vacío hasta la capa de arriba.
+    ///
+    /// Con islasApiladas, el X/Z del centro sale de un hash SIN ry y con el margen del radio
+    /// máximo: todas las islas de una columna de regiones caen exactamente una encima de otra,
+    /// sea cual sea el radio que le toque a cada una.
+    /// </summary>
+    private Vector3Int CentroIsla(int rx, int ry, int rz, out int radio, out int radioY, out bool esCaja)
+    {
         int p = Mathf.Max(3, periodoIslas);
+        int pY = PeriodoVertical;
         int rMax = Mathf.Min(radioIslaChunks.y, (p - 1) / 2 - 1);
         rMax = Mathf.Max(1, rMax);
+        int rYMax = Mathf.Max(1, Mathf.Min(radioVerticalIslaChunks.y, (pY - 2) / 2));
+        int rYMin = Mathf.Clamp(radioVerticalIslaChunks.x, 1, rYMax);
+
+        // La columna de la isla del spawn: X/Z fijos en 0 (el chunk de spawn queda en la cara
+        // inferior de su isla). Con islasApiladas, toda la columna (0, *, 0) los comparte.
+        bool columnaSpawn = rx == 0 && rz == 0 && (ry == 0 || islasApiladas);
 
         if (rx == 0 && ry == 0 && rz == 0)
         {
             radio = rMax;
+            radioY = rYMax;
             esCaja = true;
-            return new Vector3Int(0, rMax, 0); // spawn (0,0,0) en la cara inferior
+            return new Vector3Int(0, rYMax, 0); // spawn (0,0,0) en la cara inferior
         }
 
         int hash = semillaDelMundo + rx * 68111 + ry * 24851 + rz * 47657;
         Random.State prev = Random.state;
         Random.InitState(hash);
         radio = Random.Range(Mathf.Min(radioIslaChunks.x, rMax), rMax + 1);
+        radioY = Random.Range(rYMin, rYMax + 1);
         esCaja = Random.value < 0.5f;
         // Las salas colosales van siempre en CAJA y al radio máximo: una nave rectangular limpia
         // y lo más grande que permita el período. En esfera quedaría un hueco abombado con la
         // cáscara escalonada, y con radio chico dejaría de ser "colosal".
-        if (IslaEsColosal(rx, ry, rz)) { esCaja = true; radio = rMax; }
-        int margen = radio + 1;
-        int cx = rx * p + Random.Range(margen, p - margen + 1);
-        int cz = rz * p + Random.Range(margen, p - margen + 1);
+        if (IslaEsColosal(rx, ry, rz)) { esCaja = true; radio = rMax; radioY = rYMax; }
+
+        int cx, cz;
+        if (columnaSpawn)
+        {
+            cx = 0;
+            cz = 0;
+        }
+        else if (islasApiladas)
+        {
+            // Hash por COLUMNA (sin ry) y margen del radio máximo: mismo X/Z en todas las capas.
+            Random.InitState(semillaDelMundo + rx * 68111 + rz * 47657 + 911);
+            int margen = rMax + 1;
+            cx = rx * p + Random.Range(margen, p - margen + 1);
+            cz = rz * p + Random.Range(margen, p - margen + 1);
+        }
+        else
+        {
+            int margen = radio + 1;
+            cx = rx * p + Random.Range(margen, p - margen + 1);
+            cz = rz * p + Random.Range(margen, p - margen + 1);
+        }
         Random.state = prev;
 
-        return new Vector3Int(cx, ry * p + radio, cz);
+        return new Vector3Int(cx, ry * pY + radioY, cz);
     }
 
     /// <summary>
@@ -6130,11 +6181,11 @@ public class WorldGenerator : MonoBehaviour
         if (cacheIslaConectada.TryGetValue(region, out HashSet<Vector3Int> set)) return set;
 
         set = new HashSet<Vector3Int>();
-        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out _);
+        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out _, out int radioY, out _);
 
         // Semillas del BFS: la columna central (pozo) de la isla
         Queue<Vector3Int> frontera = new Queue<Vector3Int>();
-        for (int dy = -radio; dy <= radio; dy++)
+        for (int dy = -radioY; dy <= radioY; dy++)
         {
             Vector3Int c = new Vector3Int(centro.x, centro.y + dy, centro.z);
             if (EnIsla(c.x, c.y, c.z)) { set.Add(c); frontera.Enqueue(c); }
@@ -6177,13 +6228,10 @@ public class WorldGenerator : MonoBehaviour
     /// </summary>
     private bool EsCandidatoEstructura(Vector3Int chunk)
     {
-        int p = Mathf.Max(3, periodoIslas);
         // Sala colosal: la isla entera es estructura maciza (ni porosidad ni columna-pozo aplican).
         if (EsIslaColosalDeChunk(chunk.x, chunk.y, chunk.z)) return true;
-        Vector3Int centro = CentroIsla(
-            Mathf.FloorToInt((float)chunk.x / p),
-            Mathf.FloorToInt((float)chunk.y / p),
-            Mathf.FloorToInt((float)chunk.z / p), out _, out _);
+        Vector3Int region = RegionDeChunk(chunk.x, chunk.y, chunk.z);
+        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out _, out _);
         if (chunk.x == centro.x && chunk.z == centro.z) return true;   // columna-pozo
         if (TipoPuente(chunk.x, chunk.y, chunk.z) != 0) return true;    // lane de puente
         return ObtenerDensidad(chunk.x, chunk.y, chunk.z) >= umbralVacioIsla; // porosidad
@@ -6197,7 +6245,6 @@ public class WorldGenerator : MonoBehaviour
     /// </summary>
     private bool ChunkTocaVoid(int mx, int my, int mz)
     {
-        int p = Mathf.Max(3, periodoIslas);
         Vector3Int[] dirs =
         {
             new Vector3Int(1, 0, 0), new Vector3Int(-1, 0, 0),
@@ -6210,16 +6257,15 @@ public class WorldGenerator : MonoBehaviour
             bool vecinoEstructura;
             if (EnIsla(nx, ny, nz))
             {
-                Vector3Int regionVecino = new Vector3Int(
-                    Mathf.FloorToInt((float)nx / p),
-                    Mathf.FloorToInt((float)ny / p),
-                    Mathf.FloorToInt((float)nz / p));
+                Vector3Int regionVecino = RegionDeChunk(nx, ny, nz);
                 vecinoEstructura = EsCandidatoEstructura(new Vector3Int(nx, ny, nz))
                                 && ChunksConectadosDeIsla(regionVecino).Contains(new Vector3Int(nx, ny, nz));
             }
             else
             {
-                vecinoEstructura = TipoPuente(nx, ny, nz) != 0; // fuera de isla solo las lanes son estructura
+                // Fuera de isla solo las lanes de puente y la columna-pozo entre islas apiladas
+                // son estructura.
+                vecinoEstructura = TipoPuente(nx, ny, nz) != 0 || EsColumnaPozoEnVacio(nx, ny, nz);
             }
             if (!vecinoEstructura) return true;
         }
@@ -6301,7 +6347,7 @@ public class WorldGenerator : MonoBehaviour
         // Una isla colosal es UNA sala: no hay chunks sueltos donde meter un cuartel.
         if (!IslaEsColosal(region.x, region.y, region.z))
         {
-            Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out _);
+            Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out int radioY, out _);
 
             // CASCADA de candidatos, del mejor lugar al último recurso. La garantía es DURA: si el
             // nivel ideal no tiene dónde, se relajan las condiciones hasta que quepa — el cuartel
@@ -6316,7 +6362,7 @@ public class WorldGenerator : MonoBehaviour
             List<Vector3Int> loQueSea = new List<Vector3Int>();
 
             for (int mx = centro.x - radio; mx <= centro.x + radio; mx++)
-                for (int my = centro.y - radio; my <= centro.y + radio; my++)
+                for (int my = centro.y - radioY; my <= centro.y + radioY; my++)
                     for (int mz = centro.z - radio; mz <= centro.z + radio; mz++)
                     {
                         // El chunk del spawn está forzado a Sala Chica normal; no puede ser cuartel
@@ -6409,12 +6455,12 @@ public class WorldGenerator : MonoBehaviour
             return set;
         }
 
-        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out _);
+        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out int radioY, out _);
 
         List<Vector3Int> candidatos = new List<Vector3Int>();
         List<Vector3Int> borde = new List<Vector3Int>();   // casco de la isla: respaldo, no primera opción
         for (int mx = centro.x - radio; mx <= centro.x + radio; mx++)
-            for (int my = centro.y - radio; my <= centro.y + radio; my++)
+            for (int my = centro.y - radioY; my <= centro.y + radioY; my++)
                 for (int mz = centro.z - radio; mz <= centro.z + radio; mz++)
                 {
                     // El chunk de spawn ya está forzado a Sala Chica desde el tipado.
@@ -6544,8 +6590,28 @@ public class WorldGenerator : MonoBehaviour
         int p = Mathf.Max(3, periodoIslas);
         return new Vector3Int(
             Mathf.FloorToInt((float)mx / p),
-            Mathf.FloorToInt((float)my / p),
+            Mathf.FloorToInt((float)my / PeriodoVertical),
             Mathf.FloorToInt((float)mz / p));
+    }
+
+    /// <summary>Período de las capas en Y (periodoIslasVertical, mínimo 3).</summary>
+    private int PeriodoVertical => Mathf.Max(3, periodoIslasVertical);
+
+    /// <summary>
+    /// ¿Este chunk FUERA de isla es parte de la columna-pozo que une dos islas apiladas?
+    /// La columna de la región ry sigue por el vacío desde el techo de su isla hasta la base de
+    /// la isla de arriba (ry+1), que está en la misma X/Z por estar apiladas. Si cualquiera de
+    /// las dos es colosal no se tiende: la colosal no tiene columna adentro y el pozo moriría
+    /// contra su cáscara.
+    /// </summary>
+    private bool EsColumnaPozoEnVacio(int mx, int my, int mz)
+    {
+        if (!islasApiladas) return false;
+        Vector3Int r = RegionDeChunk(mx, my, mz);
+        Vector3Int c = CentroIsla(r.x, r.y, r.z, out _, out _);
+        if (mx != c.x || mz != c.z) return false;
+        if (EnIsla(mx, my, mz)) return false;
+        return !IslaEsColosal(r.x, r.y, r.z) && !IslaEsColosal(r.x, r.y + 1, r.z);
     }
 
     /// <summary>¿Este macro chunk cae en una isla que es Sala Colosal?</summary>
@@ -6597,15 +6663,15 @@ public class WorldGenerator : MonoBehaviour
 
     private bool EnIsla(int mx, int my, int mz)
     {
-        int p = Mathf.Max(3, periodoIslas);
-        int rx = Mathf.FloorToInt((float)mx / p);
-        int ry = Mathf.FloorToInt((float)my / p);
-        int rz = Mathf.FloorToInt((float)mz / p);
-        Vector3Int c = CentroIsla(rx, ry, rz, out int radio, out bool esCaja);
+        Vector3Int r = RegionDeChunk(mx, my, mz);
+        Vector3Int c = CentroIsla(r.x, r.y, r.z, out int radio, out int radioY, out bool esCaja);
         int dx = mx - c.x, dy = my - c.y, dz = mz - c.z;
         if (esCaja)
-            return Mathf.Abs(dx) <= radio && Mathf.Abs(dy) <= radio && Mathf.Abs(dz) <= radio;
-        return dx * dx + dy * dy + dz * dz <= radio * radio;
+            return Mathf.Abs(dx) <= radio && Mathf.Abs(dy) <= radioY && Mathf.Abs(dz) <= radio;
+        // Elipsoide: radio en X/Z, radioY en Y. (Entero: multiplicado por radio²·radioY² para no
+        // usar floats — con radioY == radio es exactamente la esfera de antes.)
+        long r2 = (long)radio * radio, rY2 = (long)radioY * radioY;
+        return (dx * dx + dz * dz) * rY2 + (long)dy * dy * r2 <= r2 * rY2;
     }
 
     /// <summary>
@@ -6619,8 +6685,9 @@ public class WorldGenerator : MonoBehaviour
     private int TipoPuente(int mx, int my, int mz)
     {
         int p = Mathf.Max(3, periodoIslas);
-        int ry = Mathf.FloorToInt((float)my / p);
-        if (my != ry * p) return 0; // puentes solo en el nivel base de cada capa
+        int pY = PeriodoVertical;
+        int ry = Mathf.FloorToInt((float)my / pY);
+        if (my != ry * pY) return 0; // puentes solo en el nivel base de cada capa
 
         int rx = Mathf.FloorToInt((float)mx / p);
         int rz = Mathf.FloorToInt((float)mz / p);
