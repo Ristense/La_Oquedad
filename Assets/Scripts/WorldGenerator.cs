@@ -113,7 +113,7 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("ON = los prefabs con marcadores ParedPozo se ubican según las paredes reales de cada celda (ver Prefabs Centro Pozo). OFF = todos se tratan como genéricos, con giro al azar.")]
     public bool pozoSegunParedes = true;
     [Tooltip("Log por cada celda de pozo: qué paredes detectó, qué declara el prefab elegido y con qué giro lo puso. Para comparar con lo que ves en pantalla.")]
-    public bool logPozoParedes = true;
+    public bool logPozoParedes = false;
 
     [Header("Datos de Salas (Loot)")]
     [Tooltip("Se cargan automáticamente todos los RoomData en Resources/RoomData/ en Awake. Si dejás algo asignado a mano acá, se respeta y NO se sobreescribe.")]
@@ -703,7 +703,11 @@ public class WorldGenerator : MonoBehaviour
                     if (tipo == 10) continue; // sala colosal: arrancar en medio de la nave, sin
                                               // contexto ni salida a la vista, es desorientador
 
-                    bool esVivienda = tipo == 1;
+                    // NUNCA un cuartel de centinelas, en ningún filtro ni fallback. Desde que las
+                    // viviendas son comunidades (11), la Sala Chica (1) es solo cuartel.
+                    if (tipo == 1) continue;
+
+                    bool esVivienda = EsTipoComunidad(tipo);
                     bool esPasillo = tipo == 2 || tipo == 3 || tipo == 4;
 
                     bool aceptado = filtro switch
@@ -715,13 +719,6 @@ public class WorldGenerator : MonoBehaviour
                     };
                     if (!aceptado) continue;
 
-                    // NUNCA un cuartel de centinelas, en ningún filtro ni fallback.
-                    if (esVivienda)
-                    {
-                        RoomData rd = ObtenerRoomDataParaMacro(mx, my, mz);
-                        if (rd != null && rd.esCuartelCentinelas) continue;
-                    }
-
                     candidatos.Add(new Vector3Int(mx, my, mz));
                 }
 
@@ -731,7 +728,7 @@ public class WorldGenerator : MonoBehaviour
             int idx = Random.Range(0, candidatos.Count);
             Vector3Int macro = candidatos[idx];
             candidatos.RemoveAt(idx);
-            bool esVivienda = ObtenerTipoMacroChunk(macro.x, macro.y, macro.z) == 1;
+            bool esVivienda = EsTipoComunidad(ObtenerTipoMacroChunk(macro.x, macro.y, macro.z));
 
             List<Vector3Int> celdasVacias = new List<Vector3Int>();
             for (int lx = 0; lx < macroSize; lx++)
@@ -739,8 +736,10 @@ public class WorldGenerator : MonoBehaviour
                 {
                     if (esVivienda)
                     {
-                        bool esPaso = (lx == 2 && (lz == 1 || lz == 3)) || (lz == 2 && (lx == 1 || lx == 3));
-                        if (!esPaso) continue;
+                        // En la comunidad todo el piso es transitable; se evitan solo la celda
+                        // central (prefab central / NPC) y la esquina del pilar.
+                        if (lx == 2 && lz == 2) continue;
+                        if (lx == 0 && lz == 0) continue;
                     }
 
                     Vector3Int c = new Vector3Int(macro.x * macroSize + lx, macro.y * macroSize + 1, macro.z * macroSize + lz);
@@ -1161,6 +1160,16 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("Presupuesto de TIEMPO (ms) por frame para el streaming de la burbuja (generar/encender/apagar celdas). Subilo para que el mundo cargue más rápido a costa de FPS durante ráfagas de carga; 4-6 es un buen rango a 60fps.")]
     public float msPresupuestoBurbuja = 5f;
 
+    [Header("Burbuja por alcance")]
+    [Tooltip("ON = en vez del cubo entero alrededor del jugador, se generan solo las celdas a las que se puede LLEGAR caminando por celdas vacías desde donde está (más un anillo de 1 celda para las paredes, que las genera la celda sólida de al lado). En un pasillo se ve el pasillo y lo que conecta; lo que está detrás de la roca no se genera. Nunca sale del cubo de Radio Vision (máx. 8). OFF = el cubo de siempre.\n\nEn el vacío (abismo) cae al cubo: ahí no hay por dónde caminar.")]
+    public bool burbujaPorAlcance = false;
+    [Tooltip("Cuántos pasos (celdas de 20 m) se recorren desde el jugador por celdas vacías. 12 = ~240 m de pasillo. Las salas grandes y comunidades entran enteras apenas llegás a su puerta.")]
+    [Min(1)]
+    public int pasosAlcance = 12;
+    [Tooltip("Cubo chico que se genera siempre alrededor del jugador, pase lo que pase (por si queda dentro de una pared o en pleno salto). 1 = 3x3x3 celdas.")]
+    [Min(0)]
+    public int radioCuboMinimo = 1;
+
     [Header("Descarga de memoria (streaming de SALIDA)")]
     [Tooltip("Radio en celdas más allá del cual una celda ya generada se DESTRUYE de verdad (Destroy + sale de mundoChunks) para devolverle la RAM al sistema. Sin esto la burbuja solo apaga (SetActive(false)) y todo lo que pisaste queda vivo en memoria para siempre. DEBE ser bastante mayor que el radio de burbuja (8) para no destruir/regenerar en bucle al caminar de ida y vuelta. 0 = nunca descargar (comportamiento viejo).")]
     public int radioDescarga = 16;
@@ -1220,12 +1229,19 @@ public class WorldGenerator : MonoBehaviour
 
             // 1. Burbuja deseada alrededor del centro ACTUAL
             HashSet<Vector3Int> nuevaBurbuja = new HashSet<Vector3Int>();
-            for (int x = -radio; x <= radio; x++)
-                for (int y = -radio; y <= radio; y++)
-                    for (int z = -radio; z <= radio; z++)
-                    {
-                        nuevaBurbuja.Add(new Vector3Int(centro.x + x, centro.y + y, centro.z + z));
-                    }
+            if (burbujaPorAlcance && !CentroEnAbismo(centro))
+            {
+                CalcularBurbujaPorAlcance(centro, radio, nuevaBurbuja);
+            }
+            else
+            {
+                for (int x = -radio; x <= radio; x++)
+                    for (int y = -radio; y <= radio; y++)
+                        for (int z = -radio; z <= radio; z++)
+                        {
+                            nuevaBurbuja.Add(new Vector3Int(centro.x + x, centro.y + y, centro.z + z));
+                        }
+            }
 
             // 2. Diff contra lo que está activo
             List<Vector3Int> salidas = new List<Vector3Int>();
@@ -1282,6 +1298,80 @@ public class WorldGenerator : MonoBehaviour
             // Burbuja completa y jugador quieto: dormir hasta que cambie de celda
             if (!retarget)
                 while (celdaObjetivo == centro) yield return null;
+        }
+    }
+
+    private static readonly Vector3Int[] DireccionesAlcance =
+    {
+        Vector3Int.right, Vector3Int.left, Vector3Int.up, Vector3Int.down,
+        new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1),
+    };
+
+    /// <summary>¿El jugador está en un macro de abismo (9)? Ahí no hay por dónde caminar: va el cubo.</summary>
+    private bool CentroEnAbismo(Vector3Int centro)
+    {
+        Vector3Int m = CeldaAMacroChunk(centro);
+        return ObtenerTipoMacroChunk(m.x, m.y, m.z) == 9;
+    }
+
+    /// <summary>
+    /// Burbuja por ALCANCE: BFS por celdas vacías desde el jugador (hasta pasosAlcance pasos y sin
+    /// salir del cubo de `radio`), más un anillo de 1 celda alrededor de cada celda alcanzada.
+    ///
+    /// El anillo hace falta porque cada celda genera solo las caras de SU lado -X/-Y/-Z (y las
+    /// aristas/vértices miran a sus vecinas): la pared que ves en el lado +X del pasillo la
+    /// instancia la celda sólida de al lado. Sin el anillo el pasillo quedaría con huecos.
+    ///
+    /// No se expande hacia el abismo (9): son celdas vacías sin fin y la burbuja volvería a ser
+    /// el cubo entero. Las salas abiertas (7/10/11) sí se recorren: son todo vacío pero acotado.
+    /// </summary>
+    private void CalcularBurbujaPorAlcance(Vector3Int centro, int radio, HashSet<Vector3Int> salida)
+    {
+        salida.Clear();
+
+        int rMin = Mathf.Clamp(radioCuboMinimo, 0, radio);
+        for (int x = -rMin; x <= rMin; x++)
+            for (int y = -rMin; y <= rMin; y++)
+                for (int z = -rMin; z <= rMin; z++)
+                    salida.Add(new Vector3Int(centro.x + x, centro.y + y, centro.z + z));
+
+        var visitadas = new HashSet<Vector3Int>();
+        var frontera = new Queue<(Vector3Int celda, int pasos)>();
+
+        // Semillas: las celdas vacías del cubo mínimo (si el jugador quedó dentro de una pared o
+        // en pleno salto, igual arranca desde lo que tiene al lado).
+        foreach (Vector3Int c in salida)
+        {
+            if (!IsCellEmpty(c.x, c.y, c.z)) continue;
+            if (visitadas.Add(c)) frontera.Enqueue((c, 0));
+        }
+
+        while (frontera.Count > 0)
+        {
+            var (celda, pasos) = frontera.Dequeue();
+
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dz = -1; dz <= 1; dz++)
+                        salida.Add(new Vector3Int(celda.x + dx, celda.y + dy, celda.z + dz));
+
+            if (pasos >= pasosAlcance) continue;
+
+            foreach (Vector3Int dir in DireccionesAlcance)
+            {
+                Vector3Int vecina = celda + dir;
+                if (visitadas.Contains(vecina)) continue;
+
+                Vector3Int d = vecina - centro;
+                if (Mathf.Max(Mathf.Abs(d.x), Mathf.Max(Mathf.Abs(d.y), Mathf.Abs(d.z))) > radio) continue;
+                if (!IsCellEmpty(vecina.x, vecina.y, vecina.z)) continue;
+
+                Vector3Int m = CeldaAMacroChunk(vecina);
+                if (ObtenerTipoMacroChunk(m.x, m.y, m.z) == 9) continue;
+
+                visitadas.Add(vecina);
+                frontera.Enqueue((vecina, pasos + 1));
+            }
         }
     }
 
@@ -1517,9 +1607,10 @@ public class WorldGenerator : MonoBehaviour
     /// Devuelve el tipo de Macro Chunk en la posición mundo dada.
     /// Útil para sistemas externos (sonido ambiente, niebla, etc.) que necesitan saber
     /// si el jugador está dentro de una estructura o en el vacío.
-    /// Tipos: 1=Sala Chica (Vivienda), 2/3/4=Pasillos, 5/8=Intersecciones, 6=Pozo,
-    ///        7=Sala Grande (espacio enorme con pilares), 9=Abismo (void puro, nada),
-    ///        10=Sala Colosal (la isla entera vaciada en una sola nave).
+    /// Tipos: 1=Sala Chica (ahora solo el Cuartel de centinelas), 2/3/4=Pasillos,
+    ///        5/8=Intersecciones, 6=Pozo, 7=Sala Grande (espacio enorme con pilares),
+    ///        9=Abismo (void puro, nada), 10=Sala Colosal (la isla entera vaciada en una sola nave),
+    ///        11=Sala Comunidad (vivienda: macro entero hueco como la Sala Grande, con pilares).
     /// </summary>
     public int TipoMacroChunkEnPosicion(Vector3 worldPos)
     {
@@ -1532,6 +1623,26 @@ public class WorldGenerator : MonoBehaviour
         int mz = Mathf.FloorToInt((float)z / macroSize);
         return ObtenerTipoMacroChunk(mx, my, mz);
     }
+
+    /// <summary>
+    /// Tipo de las viviendas/comunidades. Antes eran Sala Chica (1), pero en un 3x3 no entra una
+    /// comunidad: ahora ocupan el macro chunk entero, hueco como la Sala Grande (7). La identidad
+    /// de una vivienda sigue siendo su macro chunk, así que todo lo que la busca por macro
+    /// (DatosVivienda, NPC, HUD, bitácora) no cambia. El cuartel de centinelas se queda en 1.
+    /// </summary>
+    public const int TipoComunidad = 11;
+
+    /// <summary>¿Este tipo de macro chunk es una vivienda/comunidad?</summary>
+    public static bool EsTipoComunidad(int tipo) => tipo == TipoComunidad;
+
+    /// <summary>¿Este tipo tiene RoomData asignada? (Cuartel en Sala Chica o comunidad.)</summary>
+    private static bool EsTipoConRoomData(int tipo) => tipo == 1 || tipo == TipoComunidad;
+
+    /// <summary>
+    /// Sala Grande (7) y Comunidad (11): macro entero hueco con piso en ly==0. Comparten tallado,
+    /// conexiones y pilares; lo que las distingue es el contenido (la comunidad tiene RoomData).
+    /// </summary>
+    private static bool EsTipoSalaAbierta(int tipo) => tipo == 7 || tipo == TipoComunidad;
 
     /// <summary>
     /// Celdas actualmente activas (generadas y encendidas) en la burbuja alrededor del jugador.
@@ -1692,7 +1803,7 @@ public class WorldGenerator : MonoBehaviour
             // Las viviendas son casas de gente: la ronda pasa por fuera (pasillos, cruces, pozos),
             // no se mete adentro. El CUARTEL sí está permitido aunque también sea Sala Chica —
             // es su propia base.
-            if (!centinelasEntranAViviendas && tipo == 1 && !EsChunkCuartelDeIsla(mx, my, mz))
+            if (!centinelasEntranAViviendas && EsTipoComunidad(tipo))
                 continue;
 
             pisables.Clear();
@@ -1730,8 +1841,7 @@ public class WorldGenerator : MonoBehaviour
     {
         if (centinelasEntranAViviendas) return false;
         Vector3Int m = CeldaAMacroChunk(celda);
-        if (ObtenerTipoMacroChunk(m.x, m.y, m.z) != 1) return false;
-        return !EsChunkCuartelDeIsla(m.x, m.y, m.z);
+        return EsTipoComunidad(ObtenerTipoMacroChunk(m.x, m.y, m.z));
     }
 
     /// <summary>Igual que EsCeldaDeViviendaVedada pero desde una posición de mundo.</summary>
@@ -1889,8 +1999,9 @@ public class WorldGenerator : MonoBehaviour
 
     private int CalcularTipoMacroChunk(int mx, int my, int mz)
     {
-        // Forzar Sala Grande en el spawn para evitar quedar atrapado
-        if (mx == 0 && my == 0 && mz == 0) return 1;
+        // Forzar una comunidad en el spawn para evitar quedar atrapado (y que spawnEnVivienda
+        // tenga al menos una casa en la isla de origen).
+        if (mx == 0 && my == 0 && mz == 0) return TipoComunidad;
 
         // ISLAS: fuera de las islas todo es vacío, salvo los puentes que las conectan.
         // (Bloque de alcance para las variables locales del branch de isla.)
@@ -1935,7 +2046,8 @@ public class WorldGenerator : MonoBehaviour
             // 2.6) CUPO DE SALAS: las viviendas de la isla son las que eligió SalasDeIsla, y nada
             //    más. Se pueden forzar acá porque se eligen SOLO entre chunks de núcleo (no porosos,
             //    conectados, sin tocar el vacío), así que igual habrían pasado los pasos 3/4/5.
-            if (EsChunkSalaDeIsla(mx, my, mz)) return 1;
+            //    El cuartel ya salió arriba como Sala Chica (1); el resto son comunidades (11).
+            if (EsChunkSalaDeIsla(mx, my, mz)) return TipoComunidad;
 
             // 3) POROSIDAD: chunks de baja densidad son VACÍO también dentro de la isla.
             //    La isla no es un bloque encapsulado sino un ENJAMBRE de estructuras expuestas
@@ -2020,9 +2132,9 @@ public class WorldGenerator : MonoBehaviour
         // Abismo Verdadero (9): NUNCA conecta — void puro, sin entradas.
         if (type == 9) return false;
 
-        // Sala Grande (7): conecta en TODAS las direcciones a la altura del pasillo (ly==1).
-        // El piso sólido del propio caso 7 garantiza que el jugador pise algo al cruzar la entrada.
-        if (type == 7)
+        // Sala Grande (7) y Comunidad (11): conectan en TODAS las direcciones a la altura del
+        // pasillo (ly==1). El piso sólido en ly==0 garantiza que el jugador pise algo al cruzar.
+        if (EsTipoSalaAbierta(type))
         {
             return ly == 1; // toda dirección sirve mientras sea la altura de pasillo
         }
@@ -2089,9 +2201,9 @@ public class WorldGenerator : MonoBehaviour
         // La fuerza de Sala Grande en el spawn ya se hace dentro de ObtenerTipoMacroChunk
 
         // --- CONEXIONES DINÁMICAS ENTRE CHUNKS ---
-        // Sala Grande (7) y Abismo (9) son macro chunks completamente vacíos — no tallan conectores
-        // ni interactúan con la lógica de pasillos.
-        if (tipo != 7 && tipo != 9)
+        // Sala Grande (7), Comunidad (11) y Abismo (9) son macro chunks completamente vacíos — no
+        // tallan conectores ni interactúan con la lógica de pasillos.
+        if (!EsTipoSalaAbierta(tipo) && tipo != 9)
         {
             // CONEXIÓN SIMÉTRICA: el paso se abre si CUALQUIERA de los dos chunks conecta hacia
             // el otro (antes era unilateral: cada chunk tallaba solo si el VECINO conectaba hacia
@@ -2106,28 +2218,28 @@ public class WorldGenerator : MonoBehaviour
             if (lz == 2 && (lx == 0 || lx == 1))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx - 1, my, mz);
-                bool vecinoEstructura = tipoVecino != 7 && tipoVecino != 9;
+                bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
                 if (HasConnection(tipoVecino, Vector3Int.right, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.left, ly))) return true;
             }
             // Conexión con el vecino derecho (X+)
             if (lz == 2 && (lx == 3 || lx == 4))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx + 1, my, mz);
-                bool vecinoEstructura = tipoVecino != 7 && tipoVecino != 9;
+                bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
                 if (HasConnection(tipoVecino, Vector3Int.left, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.right, ly))) return true;
             }
             // Conexión con el vecino de atrás (Z-)
             if (lx == 2 && (lz == 0 || lz == 1))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx, my, mz - 1);
-                bool vecinoEstructura = tipoVecino != 7 && tipoVecino != 9;
+                bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
                 if (HasConnection(tipoVecino, Vector3Int.forward, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.back, ly))) return true;
             }
             // Conexión con el vecino de adelante (Z+)
             if (lx == 2 && (lz == 3 || lz == 4))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx, my, mz + 1);
-                bool vecinoEstructura = tipoVecino != 7 && tipoVecino != 9;
+                bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
                 if (HasConnection(tipoVecino, Vector3Int.back, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.forward, ly))) return true;
             }
         }
@@ -2162,6 +2274,12 @@ public class WorldGenerator : MonoBehaviour
                 // Resto del macro vacío (ly 1-4) → 100m de ancho × 80m de altura de espacio abierto.
                 // Sin el puente flotante del viejo abismo: el piso es continuo.
                 return ly > 0;
+
+            case TipoComunidad: // Comunidad: el mismo hueco que la Sala Grande, pero CERRADO.
+                // La Sala Grande depende de sus vecinos para tener paredes: donde toca el vacío
+                // queda abierta. Una casa no puede quedar destapada, así que donde el vecino no
+                // aporta pared la comunidad pone su propia cáscara.
+                return ly > 0 && !EsCascaraComunidad(mx, my, mz, lx, ly, lz);
 
             case 8: // Intersección T
                 return ly == 1 && (lx == 2 || (lz == 2 && lx >= 2));
@@ -2691,7 +2809,7 @@ public class WorldGenerator : MonoBehaviour
                         if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dz)) != r) continue;
 
                         int cmx = origenMacro.x + dx, cmy = origenMacro.y + dy, cmz = origenMacro.z + dz;
-                        if (ObtenerTipoMacroChunk(cmx, cmy, cmz) != 1) continue;
+                        if (!EsTipoComunidad(ObtenerTipoMacroChunk(cmx, cmy, cmz))) continue;
                         tipo1Vistos++;
 
                         RoomData rd = ObtenerRoomDataParaMacro(cmx, cmy, cmz);
@@ -2735,7 +2853,7 @@ public class WorldGenerator : MonoBehaviour
             if (logBusquedaVivienda)
             {
                 Debug.Log($"[RedViviendas] {origenMacro} NO encontró pareja. " +
-                    $"Salas tipo 1 vistas: {tipo1Vistos} · cuartel: {cuartelesDescartados} (de los cuales {porGarantiaDeIsla} por la garantía de isla, el resto salió de la RULETA). " +
+                    $"Comunidades vistas: {tipo1Vistos} · cuartel: {cuartelesDescartados} (de los cuales {porGarantiaDeIsla} por la garantía de isla, el resto salió de la RULETA). " +
                     $"Radio XZ: {radioMax}, radio Y: {radioY}, periodoIslas: {periodoIslas}, cuartelGarantizadoPorIsla: {cuartelGarantizadoPorIsla}.{detalle}");
             }
             return false;
@@ -3021,7 +3139,10 @@ public class WorldGenerator : MonoBehaviour
             }
         }
 
-        if (tipo == 1 && lx == 2 && ly == 1 && lz == 2)
+        // Celda central de una sala con RoomData (cuartel o comunidad): prefab central (trae al
+        // NPC), cartel, almacenamiento, loot, registro de la vivienda y cofre de misión.
+        // TODO comunidad: esto es del 3x3 viejo; en la comunidad lo reemplaza la planta de 100x100.
+        if (EsTipoConRoomData(tipo) && lx == 2 && ly == 1 && lz == 2)
         {
             RoomData sala = ObtenerRoomDataParaMacro(mx, my, mz);
 
@@ -3145,13 +3266,17 @@ public class WorldGenerator : MonoBehaviour
 
         // Secciones de vivienda: SOLO las 4 esquinas del 3x3 (lx/lz ∈ {1,3}). Las celdas del
         // medio de cada lado (2,1)/(1,2)/(3,2)/(2,3) son las que dan a las puertas → se saltean.
-        if (tipo == 1 && ly == 1 && (lx == 1 || lx == 3) && (lz == 1 || lz == 3))
+        // En la comunidad (11) van en las mismas 4 celdas, alrededor del centro de la sala grande,
+        // mientras no exista la planta con marcadores que las ubique.
+        if (EsTipoConRoomData(tipo) && ly == 1 && (lx == 1 || lx == 3) && (lz == 1 || lz == 3))
         {
             IntentarGenerarSeccionVivienda(mx, my, mz, celda, origin, x, y, z, lx, lz);
         }
 
         // Luces de Sala: para cualquier celda del 3x3 del piso de la Sala Grande, EXCEPTO la central.
         // La configuración (prefabs, cantidad, offset) vive en la RoomData asignada a este macro chunk.
+        // Solo Sala Chica: en la comunidad no hay techo a la altura de ly==1 (la sala sube hasta
+        // ly==4) y las luces quedarían flotando a media altura.
         if (tipo == 1 && ly == 1
             && lx >= 1 && lx <= 3 && lz >= 1 && lz <= 3
             && !(lx == 2 && lz == 2))
@@ -3848,7 +3973,7 @@ public class WorldGenerator : MonoBehaviour
         int cmy = Mathf.FloorToInt((float)cy / macroSize);
         int cmz = Mathf.FloorToInt((float)cz / macroSize);
         int ctipo = ObtenerTipoMacroChunk(cmx, cmy, cmz);
-        return ctipo != 7 && IsCellEmpty(cx, cy, cz);
+        return !EsTipoSalaAbierta(ctipo) && IsCellEmpty(cx, cy, cz);
     }
 
 
@@ -4238,6 +4363,40 @@ public class WorldGenerator : MonoBehaviour
     }
 
     /// <summary>
+    /// ¿Esta celda de una comunidad es parte de su CÁSCARA (queda sólida)?
+    ///
+    /// Solo se cierran los bordes donde el vecino no pone pared por su cuenta: el abismo (9),
+    /// que es todo vacío, y otra sala abierta (7/11), que también es hueca hasta el borde. Contra
+    /// pasillos, pozos, cruces o el cuartel no hace falta: sus celdas del borde ya son sólidas
+    /// (salvo la boca del pasillo, que es justo la puerta) y la pared nace de ellas.
+    ///
+    /// Contra otra sala abierta se deja una PUERTA a la altura del pasillo (ly==1, centro del
+    /// lado), igual que la boca que tallan los pasillos. Techo (ly==4) solo contra el abismo: una
+    /// sala abierta encima tiene su propio piso sólido en ly==0. El piso (ly==0) ya es sólido.
+    /// </summary>
+    private bool EsCascaraComunidad(int mx, int my, int mz, int lx, int ly, int lz)
+    {
+        int ultimo = macroSize - 1;
+
+        if (ly == ultimo && ObtenerTipoMacroChunk(mx, my + 1, mz) == 9) return true;
+
+        bool LadoAbierto(int vx, int vz, bool enCentroDelLado)
+        {
+            int t = ObtenerTipoMacroChunk(vx, my, vz);
+            if (t == 9) return true;
+            if (!EsTipoSalaAbierta(t)) return false;
+            return !(ly == 1 && enCentroDelLado); // puerta hacia la otra sala
+        }
+
+        int centro = macroSize / 2;
+        if (lx == 0 && LadoAbierto(mx - 1, mz, lz == centro)) return true;
+        if (lx == ultimo && LadoAbierto(mx + 1, mz, lz == centro)) return true;
+        if (lz == 0 && LadoAbierto(mx, mz - 1, lx == centro)) return true;
+        if (lz == ultimo && LadoAbierto(mx, mz + 1, lx == centro)) return true;
+        return false;
+    }
+
+    /// <summary>
     /// Devuelve true si la celda está en un macro chunk de Sala Grande (7), Abismo (9) o
     /// Sala Colosal (10). Útil para que decoraciones de pasillo (pasarelas, etc.) no se extiendan
     /// adentro, y para que el pasillo que desemboca ahí se trate como BOCA (recibe su marco).
@@ -4248,7 +4407,7 @@ public class WorldGenerator : MonoBehaviour
         int my = Mathf.FloorToInt((float)y / macroSize);
         int mz = Mathf.FloorToInt((float)z / macroSize);
         int t = ObtenerTipoMacroChunk(mx, my, mz);
-        return t == 7 || t == 9 || t == 10;
+        return EsTipoSalaAbierta(t) || t == 9 || t == 10;
     }
 
     private bool EsPasilloInteractuable(int x, int y, int z)
@@ -4266,7 +4425,7 @@ public class WorldGenerator : MonoBehaviour
 
         int tipo = ObtenerTipoMacroChunk(mx, my, mz);
         // Excluimos Sala Chica (1), Pozo (6), Sala Grande (7), Abismo (9) y Sala Colosal (10)
-        if (tipo == 1 || tipo == 6 || tipo == 7 || tipo == 9 || tipo == 10) return false;
+        if (tipo == 1 || tipo == 6 || EsTipoSalaAbierta(tipo) || tipo == 9 || tipo == 10) return false;
 
         // Debe ser una celda transitable (vacía)
         return IsCellEmpty(x, y, z);
@@ -5691,8 +5850,9 @@ public class WorldGenerator : MonoBehaviour
             {
                 for (int mz = centroMZ - rangoMacro; mz <= centroMZ + rangoMacro; mz++)
                 {
-                    // Si el generador considera que este macro chunk es de tipo 1 (Sala)
-                    if (ObtenerTipoMacroChunk(mx, my, mz) == 1)
+                    // Si el generador considera que este macro chunk es una sala con RoomData
+                    // (cuartel en Sala Chica o comunidad)
+                    if (EsTipoConRoomData(ObtenerTipoMacroChunk(mx, my, mz)))
                     {
                         macrosSala.Add(new Vector3Int(mx, my, mz));
                     }
@@ -5750,7 +5910,7 @@ public class WorldGenerator : MonoBehaviour
             {
                 for (int mz = -rangoMacro; mz <= rangoMacro; mz++)
                 {
-                    if (ObtenerTipoMacroChunk(mx, my, mz) == 1)
+                    if (EsTipoConRoomData(ObtenerTipoMacroChunk(mx, my, mz)))
                     {
                         macrosSala.Add(new Vector3Int(mx, my, mz));
                     }

@@ -17,7 +17,7 @@ public static class GenerarBichoPlaceholder
     private const float LargoSegmento = 0.8f;
     private const float Grosor = 0.15f;
 
-    [MenuItem("Tools/In Side Us/Generar Bicho IK Placeholder")]
+    [MenuItem("Tools/La Oquedad/Generar Bicho IK Placeholder")]
     public static void Generar()
     {
         GameObject cuerpo = new GameObject("BichoPlaceholder");

@@ -10,7 +10,7 @@ public static class GenerarTexturaVidrioGastado
     private const string CarpetaSalida = "Assets/Materials/Texturas";
     private const string NombreArchivo = "VidrioGastadoBorde.png";
 
-    [MenuItem("Tools/In Side Us/Generar Textura Vidrio Gastado")]
+    [MenuItem("Tools/La Oquedad/Generar Textura Vidrio Gastado")]
     public static void Generar()
     {
         var rng = new System.Random(Environment.TickCount);

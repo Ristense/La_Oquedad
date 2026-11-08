@@ -67,14 +67,14 @@ public class RegistroViviendas : MonoBehaviour
 
     /// <summary>
     /// Macro chunk de la vivienda que contiene esa posición de mundo.
-    /// Devuelve false si ahí no hay una vivienda (sala tipo 1).
+    /// Devuelve false si ahí no hay una vivienda (comunidad, tipo 11).
     /// </summary>
     public bool TryMacroDeVivienda(Vector3 worldPos, out Vector3Int macro)
     {
         macro = default;
         WorldGenerator wg = WorldGenerator.Instance;
         if (wg == null) return false;
-        if (wg.TipoMacroChunkEnPosicion(worldPos) != 1) return false;
+        if (!WorldGenerator.EsTipoComunidad(wg.TipoMacroChunkEnPosicion(worldPos))) return false;
 
         Vector3Int celda = wg.MundoACelda(worldPos);
         macro = new Vector3Int(

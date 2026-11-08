@@ -250,9 +250,9 @@ public class AmbientSounds : MonoBehaviour
         }
         else
         {
-            // Vivienda = macro chunk tipo 1 (misma consulta que usa RegistroViviendas). Todo lo
+            // Vivienda = macro chunk de comunidad (misma consulta que usa RegistroViviendas). Todo lo
             // demás bajo techo cuenta como pasillo: cruces, pozos, salas grandes.
-            bool enVivienda = worldGen != null && worldGen.TipoMacroChunkEnPosicion(jugadorTransform.position) == 1;
+            bool enVivienda = worldGen != null && WorldGenerator.EsTipoComunidad(worldGen.TipoMacroChunkEnPosicion(jugadorTransform.position));
             contextosActivos.Add(enVivienda ? ContextoAmbiente.Vivienda : ContextoAmbiente.Pasillo);
         }
 

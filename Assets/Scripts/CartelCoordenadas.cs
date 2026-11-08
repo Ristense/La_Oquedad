@@ -12,7 +12,7 @@ public class CartelCoordenadas : MonoBehaviour
     public TMP_Text textoDisplay;
 
     [Header("Ajustes de Escala")]
-    [Tooltip("Tamaño de cada chunk o celda en metros (In Side Us usa 20m).")]
+    [Tooltip("Tamaño de cada chunk o celda en metros (La Oquedad usa 20m).")]
     public float tamañoCelda = 20f;
 
     [Header("Formato Visual")]
