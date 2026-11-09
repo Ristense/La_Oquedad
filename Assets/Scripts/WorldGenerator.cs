@@ -469,6 +469,16 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("Probabilidad (0 a 1) de que un piso se salte y no tenga ningún punto.")]
     [Range(0f, 1f)]
     public float probabilidadSaltarPisoAndamio = 0.25f;
+    [Tooltip("Dibuja además los CAMINOS que conectan el piso con cada punto de andamio y con el centro del techo: celeste = tramo de pasillo, naranjo = escalera (sube/baja un piso). Solo dibujo, no genera nada.")]
+    public bool dibujarCaminosAndamio = true;
+    [Tooltip("Cuánto se castiga pasar por una celda que NO toca ninguna pared. Más alto = los caminos se pegan más a las paredes aunque den más vuelta.")]
+    [Min(0f)]
+    public float costoLejosDePared = 3f;
+    [Tooltip("Costo extra de subir o bajar un piso (escalera) frente a avanzar un tramo de pasillo.")]
+    [Min(0f)]
+    public float costoEscalera = 1f;
+    [Tooltip("Agrega una segunda subida separada de la primera, que se une a la red arriba.")]
+    public bool segundaSubidaComunidad = false;
 
     [Header("Habitantes con Rutina (gente que vive en la vivienda)")]
     [Tooltip("Prefabs de las personas que viven en cada vivienda y caminan por su planta baja. Cada prefab necesita el componente HabitanteRutina (ahí se ajustan velocidad, paradas y tiempos). Se elige uno por persona, determinista por semilla. Vacío = sistema apagado.")]
@@ -605,6 +615,7 @@ public class WorldGenerator : MonoBehaviour
         misionesEncadenadasPorCelda.Clear();
         destinoPorNota.Clear();
         registroViviendas.Clear();
+        RegistroMisiones.LimpiarMisiones();
         viviendaBuscadaPor.Clear();
 
         // Precalcular misiones de las notas
@@ -1099,6 +1110,7 @@ public class WorldGenerator : MonoBehaviour
         misionesEncadenadasPorCelda.Clear();
         destinoPorNota.Clear();
         registroViviendas.Clear();
+        RegistroMisiones.LimpiarMisiones();
         viviendaBuscadaPor.Clear();
 
         NotaData[] todasLasNotas = Resources.LoadAll<NotaData>("");
@@ -2225,7 +2237,6 @@ public class WorldGenerator : MonoBehaviour
     /// </summary>
     private void InstanciarHabitantesRutina(Vector3Int celdaCentral, Vector3Int macro)
     {
-        Debug.Log($"[Habitantes] vivienda {macro}: prefabs={(prefabsHabitantesRutina == null ? "null" : prefabsHabitantesRutina.Length.ToString())}, por vivienda={habitantesPorVivienda}");
         if (prefabsHabitantesRutina == null || prefabsHabitantesRutina.Length == 0) return;
         if (habitantesPorVivienda <= 0) return;
 
@@ -2247,7 +2258,6 @@ public class WorldGenerator : MonoBehaviour
             go.name = $"{prefab.name} · vivienda {macro} · #{i}";
             go.SetActive(false); // lo prende la burbuja junto con el resto de la celda
             RegistrarEnCelda(celdaCentral, go);
-            Debug.Log($"[Habitantes] creado '{go.name}' en {go.transform.position}");
         }
     }
 
@@ -2307,6 +2317,117 @@ public class WorldGenerator : MonoBehaviour
                 RegistrarEnCelda(celdaCentral, go);
             }
         }
+    }
+
+    // ---------- Cofres de misión ----------
+
+    [Header("Misiones de Cofre")]
+    [Tooltip("A cuántas celdas (máximo) del borde de la vivienda puede aparecer el cofre de una misión. Siempre afuera, en una celda con piso.")]
+    [Min(1)]
+    public int distanciaMaxCofreMision = 2;
+
+    /// <summary>
+    /// Pone el cofre de una misión en un pasillo cerca de la vivienda: una celda vacía con piso,
+    /// FUERA de la comunidad y a lo sumo `distanciaMaxCofreMision` celdas de su borde. Le pone el
+    /// objeto pedido (garantizado) y resuelve los PuntoSpawnItem del cofre como extras.
+    ///
+    /// El cofre NO va a los contenedores por celda: la descarga lo destruiría al alejarte y al
+    /// volver no se regenera (no es parte de la semilla). Queda suelto en la escena hasta que la
+    /// misión se cierre. Devuelve null si no hay ninguna celda que sirva.
+    /// </summary>
+    public GameObject SpawnCofreMision(Vector3Int macroVivienda, MisionData mision, int semilla, out Vector3Int celdaCofre)
+    {
+        celdaCofre = default;
+        if (mision == null || mision.prefabCofre == null) return null;
+
+        int s = macroSize;
+        Vector3Int b = macroVivienda * s;
+        int d = Mathf.Max(1, distanciaMaxCofreMision);
+
+        var candidatas = new List<Vector3Int>();
+        for (int x = b.x - d; x < b.x + s + d; x++)
+            for (int z = b.z - d; z < b.z + s + d; z++)
+                for (int y = b.y + 1; y < b.y + s; y++)
+                {
+                    bool dentro = x >= b.x && x < b.x + s && z >= b.z && z < b.z + s;
+                    if (dentro) continue;
+                    if (!IsCellEmpty(x, y, z) || IsCellEmpty(x, y - 1, z)) continue; // vacía y con piso
+
+                    Vector3Int c = new Vector3Int(x, y, z);
+                    Vector3Int m = CeldaAMacroChunk(c);
+                    int t = ObtenerTipoMacroChunk(m.x, m.y, m.z);
+                    if (t == 9 || EsTipoComunidad(t)) continue;
+                    if (EsPosicionDePozoOSinPiso(CeldaACentroMundoPiso(c) + Vector3.up * 0.5f, out _)) continue;
+                    candidatas.Add(c);
+                }
+
+        if (candidatas.Count == 0)
+        {
+            Debug.LogWarning($"[Misiones] No hay ningún pasillo con piso a {d} celdas de la vivienda {macroVivienda}: el cofre de '{mision.titulo}' no aparece.");
+            return null;
+        }
+
+        var rng = new System.Random(semilla ^ 0x6C0F);
+        celdaCofre = candidatas[rng.Next(candidatas.Count)];
+
+        Vector3 pos = CeldaACentroMundoPiso(celdaCofre);
+        Quaternion rot = Quaternion.Euler(0f, rng.Next(4) * 90f, 0f);
+        GameObject cofre = Instantiate(mision.prefabCofre, pos, rot);
+        cofre.name = $"Cofre misión '{mision.titulo}' · {celdaCofre}";
+
+        // Objeto pedido: en los hijos "PuntoMision" si los hay; si no, en los PuntoSpawnItem del
+        // cofre (elegidos al azar, y esos ya no sacan extras); solo sin ningún punto va encima.
+        var puntos = new List<Transform>();
+        foreach (Transform t in cofre.GetComponentsInChildren<Transform>(true))
+            if (t.name.StartsWith("PuntoMision")) puntos.Add(t);
+
+        var puntosSpawn = new List<PuntoSpawnItem>(cofre.GetComponentsInChildren<PuntoSpawnItem>(true));
+        var usadosPorPedido = new HashSet<PuntoSpawnItem>();
+        if (puntos.Count == 0 && puntosSpawn.Count > 0)
+        {
+            for (int i = puntosSpawn.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (puntosSpawn[i], puntosSpawn[j]) = (puntosSpawn[j], puntosSpawn[i]);
+            }
+            int n = Mathf.Min(mision.cantidadPedida, puntosSpawn.Count);
+            for (int i = 0; i < n; i++)
+            {
+                puntos.Add(puntosSpawn[i].transform);
+                usadosPorPedido.Add(puntosSpawn[i]);
+            }
+        }
+
+        Bounds limites = new Bounds(pos, Vector3.zero);
+        foreach (Renderer r in cofre.GetComponentsInChildren<Renderer>()) limites.Encapsulate(r.bounds);
+
+        for (int i = 0; i < mision.cantidadPedida; i++)
+        {
+            Vector3 p = puntos.Count > 0
+                ? puntos[i % puntos.Count].position + Vector3.up * 0.3f * (i / puntos.Count)
+                : new Vector3(pos.x, limites.max.y + 0.2f + i * 0.3f, pos.z);
+            Quaternion r = puntos.Count > 0 ? puntos[i % puntos.Count].rotation : rot;
+            GameObject obj = Instantiate(mision.objetoPedido, p, r, cofre.transform);
+            obj.name = $"{mision.objetoPedido.name} (misión)";
+        }
+
+        // Extras: los PuntoSpawnItem que no usó el pedido, con su propio Random (no toca la semilla global).
+        foreach (PuntoSpawnItem punto in puntosSpawn)
+        {
+            if (usadosPorPedido.Contains(punto)) { punto.gameObject.SetActive(false); continue; }
+
+            bool sale = rng.NextDouble() <= punto.probabilidadSpawn;
+            GameObject elegido = null;
+            if (sale && punto.itemsPosibles != null)
+                foreach (PuntoSpawnItem.ItemPosible item in punto.itemsPosibles)
+                    if (item.prefab != null && rng.NextDouble() <= item.probabilidad) { elegido = item.prefab; break; }
+
+            if (elegido != null)
+                Instantiate(elegido, punto.transform.position, punto.transform.rotation, cofre.transform);
+            punto.gameObject.SetActive(false);
+        }
+
+        return cofre;
     }
 
     // ---------- Puntos de andamio de la comunidad (por ahora solo para verlos) ----------
@@ -2399,6 +2520,195 @@ public class WorldGenerator : MonoBehaviour
             }
         }
         return res;
+    }
+
+    /// <summary>
+    /// Caminos que conectan TODO lo alto de una comunidad con el piso: cada punto de andamio y el
+    /// centro del techo (la columna central llega siempre arriba). Cada camino es una lista de
+    /// celdas huecas de la comunidad, de la que ya estaba conectada hasta el objetivo; un paso
+    /// horizontal es un tramo de pasillo de 1 celda y uno vertical es una escalera.
+    ///
+    /// Se conectan de abajo hacia arriba y cada camino se suma a lo conectado, así los de arriba
+    /// pueden salir de los de abajo en vez de bajar hasta el piso. Dijkstra por celdas: se paga
+    /// extra (costoLejosDePared) por pasar por una celda que no toca ninguna pared, para que los
+    /// caminos vayan colgados de los muros, y costoEscalera por cada piso que se sube o baja.
+    /// Por ahora solo los dibuja DebugAndamiosComunidad.
+    /// </summary>
+    public List<List<Vector3Int>> CaminosComunidad(Vector3Int macro)
+    {
+        var caminos = new List<List<Vector3Int>>();
+        if (!EsTipoComunidad(ObtenerTipoMacroChunk(macro.x, macro.y, macro.z))) return caminos;
+
+        int s = macroSize;
+        Vector3Int b = macro * s;
+
+        int medio = s / 2;
+        bool Transitable(Vector3Int c)
+        {
+            Vector3Int l = c - b;
+            if (l.x < 0 || l.x >= s || l.z < 0 || l.z >= s || l.y < 1 || l.y >= s) return false;
+            if (!IsCellEmpty(c.x, c.y, c.z)) return false;
+
+            // Construcciones: en planta baja el 3x3 interior es del prefab central y las secciones.
+            // Encima de la estructura central SÍ se puede pasar (un tramo apoyado sobre ella se ve
+            // construido); lo que no se puede es subir o bajar por adentro de ella (ver EscaleraOk).
+            if (l.y == 1 && l.x >= 1 && l.x <= s - 2 && l.z >= 1 && l.z <= s - 2) return false;
+            return true;
+        }
+
+        // Las escaleras no van por la columna central: ahí está la estructura.
+        bool EscaleraOk(Vector3Int desde, Vector3Int hacia)
+        {
+            if (desde.y == hacia.y) return true;
+            Vector3Int l = desde - b;
+            return !(l.x == medio && l.z == medio);
+        }
+
+        bool TocaPared(Vector3Int c)
+        {
+            foreach (Vector3Int d in DireccionesHorizontalesComunidad)
+            {
+                Vector3Int n = c + d;
+                if (!IsCellEmpty(n.x, n.y, n.z)) return true;
+            }
+            return false;
+        }
+
+        // Lo conectado de entrada: todo el piso de la comunidad.
+        var conectadas = new HashSet<Vector3Int>();
+        for (int lx = 0; lx < s; lx++)
+            for (int lz = 0; lz < s; lz++)
+            {
+                Vector3Int c = b + new Vector3Int(lx, 1, lz);
+                if (Transitable(c)) conectadas.Add(c);
+            }
+
+        var objetivos = new List<Vector3Int>();
+        foreach (PuntoAndamio p in PuntosAndamioComunidad(macro)) objetivos.Add(p.celda);
+        Vector3Int techoCentro = b + new Vector3Int(s / 2, s - 1, s / 2);
+        if (Transitable(techoCentro)) objetivos.Add(techoCentro);
+        objetivos.Sort((a, c) => a.y.CompareTo(c.y));
+
+        foreach (Vector3Int objetivo in objetivos)
+        {
+            if (conectadas.Contains(objetivo)) continue;
+            List<Vector3Int> camino = CaminoMasBaratoComunidad(objetivo, conectadas, Transitable, TocaPared, EscaleraOk);
+            if (camino == null) continue;
+            caminos.Add(camino);
+            foreach (Vector3Int c in camino) conectadas.Add(c);
+        }
+
+        // SEGUNDA SUBIDA, independiente de la primera: sale del piso y sube sin acercarse a los
+        // caminos anteriores — siempre al menos una celda de aire de por medio (ni al lado, ni
+        // encima, ni en diagonal) — y recién al final se UNE a la red, lo más arriba posible. Así hay
+        // dos rutas para subir y bajar, y todo queda conectado.
+        if (!segundaSubidaComunidad) return caminos;
+
+        var red = new HashSet<Vector3Int>();
+        var cercaDeCaminos = new HashSet<Vector3Int>();
+        foreach (List<Vector3Int> camino in caminos)
+            foreach (Vector3Int c in camino)
+            {
+                if (c.y - b.y == 1) { cercaDeCaminos.Add(c); continue; } // en el piso basta no repetir la celda
+                red.Add(c);
+                for (int dx = -1; dx <= 1; dx++)
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dz = -1; dz <= 1; dz++)
+                            cercaDeCaminos.Add(c + new Vector3Int(dx, dy, dz));
+            }
+
+        bool LibreParaSegunda(Vector3Int c) => Transitable(c) && !cercaDeCaminos.Contains(c);
+
+        var pisoLibre = new HashSet<Vector3Int>();
+        foreach (Vector3Int c in conectadas)
+            if (c.y - b.y == 1 && !cercaDeCaminos.Contains(c)) pisoLibre.Add(c);
+
+        // Puntos de unión: una celda libre pegada (6 direcciones) a una celda de la red. Es la única
+        // celda de la segunda subida que puede estar al lado de la red; de ahí para abajo, separada.
+        var uniones = new List<(Vector3Int union, Vector3Int enRed)>();
+        foreach (Vector3Int r in red)
+            foreach (Vector3Int d in DireccionesCaminoComunidad)
+            {
+                Vector3Int j = r + d;
+                if (red.Contains(j) || !Transitable(j) || !EscaleraOk(j, r)) continue;
+                uniones.Add((j, r));
+            }
+        uniones.Sort((a, c) => c.enRed.y.CompareTo(a.enRed.y)); // lo más arriba primero
+
+        List<Vector3Int> segunda = null;
+        int alturaUnion = int.MinValue;
+        foreach (var (union, enRed) in uniones)
+        {
+            if (segunda != null && enRed.y < alturaUnion) break; // ya hay una a más altura
+            List<Vector3Int> camino = CaminoMasBaratoComunidad(union, pisoLibre,
+                c => c == union || LibreParaSegunda(c), TocaPared, EscaleraOk);
+            if (camino == null || camino.Count < 3) continue; // que de verdad sea otra subida
+            if (segunda != null && camino.Count + 1 >= segunda.Count) continue;
+            camino.Add(enRed);
+            segunda = camino;
+            alturaUnion = enRed.y;
+        }
+
+        if (segunda != null) caminos.Add(segunda);
+        else Debug.Log($"[Andamios] comunidad {macro}: no hay espacio para una segunda subida separada de la primera.");
+        return caminos;
+    }
+
+    private static readonly Vector3Int[] DireccionesHorizontalesComunidad =
+    {
+        Vector3Int.forward, Vector3Int.right, Vector3Int.back, Vector3Int.left,
+    };
+
+    private static readonly Vector3Int[] DireccionesCaminoComunidad =
+    {
+        Vector3Int.forward, Vector3Int.right, Vector3Int.back, Vector3Int.left, Vector3Int.up, Vector3Int.down,
+    };
+
+    /// <summary>
+    /// Dijkstra desde `desde` hasta la celda conectada más barata. Devuelve el camino ordenado de lo
+    /// conectado hacia `desde`, o null si no hay forma de llegar. El grafo es una comunidad (≤125
+    /// celdas), así que la cola es una lista con búsqueda lineal: no hace falta un heap.
+    /// </summary>
+    private List<Vector3Int> CaminoMasBaratoComunidad(Vector3Int desde, HashSet<Vector3Int> conectadas,
+        System.Func<Vector3Int, bool> transitable, System.Func<Vector3Int, bool> tocaPared,
+        System.Func<Vector3Int, Vector3Int, bool> pasoOk)
+    {
+        var costo = new Dictionary<Vector3Int, float> { [desde] = 0f };
+        var previo = new Dictionary<Vector3Int, Vector3Int>();
+        var abiertas = new List<Vector3Int> { desde };
+        var cerradas = new HashSet<Vector3Int>();
+
+        while (abiertas.Count > 0)
+        {
+            int mejor = 0;
+            for (int i = 1; i < abiertas.Count; i++)
+                if (costo[abiertas[i]] < costo[abiertas[mejor]]) mejor = i;
+            Vector3Int actual = abiertas[mejor];
+            abiertas.RemoveAt(mejor);
+            if (!cerradas.Add(actual)) continue;
+
+            if (conectadas.Contains(actual))
+            {
+                var camino = new List<Vector3Int> { actual };
+                while (previo.TryGetValue(camino[camino.Count - 1], out Vector3Int p)) camino.Add(p);
+                return camino;
+            }
+
+            foreach (Vector3Int d in DireccionesCaminoComunidad)
+            {
+                Vector3Int n = actual + d;
+                if (cerradas.Contains(n) || !transitable(n) || !pasoOk(actual, n)) continue;
+
+                float paso = 1f + (d.y != 0 ? costoEscalera : 0f) + (tocaPared(n) ? 0f : costoLejosDePared);
+                float nuevo = costo[actual] + paso;
+                if (costo.TryGetValue(n, out float viejo) && viejo <= nuevo) continue;
+
+                costo[n] = nuevo;
+                previo[n] = actual;
+                abiertas.Add(n);
+            }
+        }
+        return null;
     }
 
     // ---------- Forma de las comunidades ----------

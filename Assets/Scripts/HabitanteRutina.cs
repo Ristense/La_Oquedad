@@ -33,10 +33,33 @@ public class HabitanteRutina : MonoBehaviour
     public bool permitirDialogo = true;
     [Tooltip("Distancia máxima para interactuar con [E].")]
     public float alcanceInteraccion = 3.5f;
+    [Tooltip("Al hablarle se queda quieto mirándote. Cuando dejás de mirarlo, espera estos segundos y vuelve a su rutina.")]
+    [Min(0f)]
+    public float esperaAlDejarDeMirar = 1f;
+    [Tooltip("Si te alejás más que esto (en múltiplos del alcance de interacción) mientras te atiende, vuelve a su rutina al toque.")]
+    [Min(1f)]
+    public float multiplicadorDistanciaAtencion = 2f;
     [Tooltip("Segundos de reserva bajo los cuales este trabajador considera que su recurso está en estado CRÍTICO y pide ayuda.")]
     public float umbralNecesidadRecurso = 600f;
     [Tooltip("DESACTIVADO POR AHORA: Si lo activás, al hablarle con [E] sosteniendo un consumible en la mano que aporte su recurso, se lo entregás directo a la vivienda.")]
     public bool permitirEntregarRecursoDirecto = false;
+
+    [Header("Misión")]
+    [Tooltip("Probabilidad (por semilla) de que esta persona tenga una misión para dar. Se le marca con un \"!\" sobre la cabeza (IndicadorMision).")]
+    [Range(0f, 1f)]
+    public float probabilidadMision = 0.3f;
+
+    /// <summary>¿Esta persona tiene una misión? Se decide en Inicializar, por semilla.</summary>
+    public bool TieneMision { get; private set; }
+    public IndicadorMision Indicador { get; private set; }
+    /// <summary>La misión que da (de Resources/Misiones), elegida por semilla. Null si no tiene.</summary>
+    public MisionData Mision { get; private set; }
+
+    private WorldGenerator wgMision;
+    private int indiceHabitante;
+
+    // Todas las misiones del proyecto, cargadas una sola vez para todos los habitantes.
+    private static MisionData[] misionesDisponibles;
 
     // ---- Frases ----
     // Las frases de verdad viven en assets FrasesProfesion (Resources/Profesiones/), uno por
@@ -184,6 +207,17 @@ public class HabitanteRutina : MonoBehaviour
 
         semillaPersona = wg.semillaDelMundo ^ (macro.x * 73856) ^ (macro.y * 19349) ^ (macro.z * 83492) ^ (indice * 2654435);
         var rng = new System.Random(semillaPersona);
+
+        // Misión: con su propio Random, así no le cambia la profesión ni la rutina a nadie.
+        wgMision = wg;
+        indiceHabitante = indice;
+        var rngMision = new System.Random(semillaPersona ^ 0x4D15);
+        TieneMision = rngMision.NextDouble() < probabilidadMision;
+        Mision = TieneMision ? ElegirMision(rngMision) : null;
+        if (Mision == null) TieneMision = false; // sin assets de misión no hay nada que dar
+        Indicador = GetComponent<IndicadorMision>();
+        if (TieneMision && Indicador == null) Indicador = gameObject.AddComponent<IndicadorMision>();
+        ActualizarIndicadorMision();
 
         // 1. Sortear profesión por semilla (es azar: dos personas de la misma casa pueden repetir)
         if (asignarTrabajoAlAzar)
@@ -390,6 +424,10 @@ public class HabitanteRutina : MonoBehaviour
                 if (permitirEntregarRecursoDirecto && JugadorSostieneRecursoDeEsteTrabajo(out _))
                     prompt = $"[E] Entregar suministro ({etiquetaRol})";
 
+                InventoryItem pedido = ObjetoDeMisionEnMano(out _);
+                if (pedido != null)
+                    prompt = $"[E] Entregar {pedido.data.nombreArticulo} ({etiquetaRol})";
+
                 if (TooltipManager.Instance != null)
                     TooltipManager.Instance.MostrarTooltip(gameObject, prompt);
 
@@ -405,6 +443,10 @@ public class HabitanteRutina : MonoBehaviour
     {
         if (TooltipManager.Instance != null)
             TooltipManager.Instance.OcultarTooltip();
+
+        EmpezarAtencion();
+        if (IntentarEntregarDeMano()) return;
+        if (AtenderMision()) return;
 
         // Mecánica de entrega directa (desactivada por defecto con permitirEntregarRecursoDirecto = false)
         if (permitirEntregarRecursoDirecto && IntentarRecibirRecursoDeMano(out string mensajeEntrega))
@@ -425,12 +467,112 @@ public class HabitanteRutina : MonoBehaviour
         MostrarDialogo($"[{NombreRol()}] {frase}");
     }
 
+    // ---------- Misión de cofre ----------
+
+    private static MisionData ElegirMision(System.Random rng)
+    {
+        if (misionesDisponibles == null) misionesDisponibles = Resources.LoadAll<MisionData>("Misiones");
+
+        float total = 0f;
+        foreach (MisionData m in misionesDisponibles)
+            if (m != null && m.prefabCofre != null && m.objetoPedido != null) total += m.pesoAparicion;
+        if (total <= 0f) return null;
+
+        double tirada = rng.NextDouble() * total;
+        MisionData ultima = null;
+        foreach (MisionData m in misionesDisponibles)
+        {
+            if (m == null || m.prefabCofre == null || m.objetoPedido == null) continue;
+            ultima = m;
+            tirada -= m.pesoAparicion;
+            if (tirada <= 0) return m;
+        }
+        return ultima;
+    }
+
+    /// <summary>"!" si la tiene para dar, "?" si está en curso, nada si no tiene o ya se cerró.</summary>
+    private void ActualizarIndicadorMision()
+    {
+        if (Indicador == null) return;
+        if (!TieneMision) { Indicador.SetEstado(IndicadorMision.Estado.Ninguna); return; }
+
+        RegistroMisiones.Mision m = RegistroMisiones.Buscar(macroVivienda, indiceHabitante);
+        if (m == null) Indicador.SetEstado(IndicadorMision.Estado.Disponible);
+        else if (m.estado == RegistroMisiones.Estado.Aceptada) Indicador.SetEstado(IndicadorMision.Estado.EnCurso);
+        else Indicador.SetEstado(IndicadorMision.Estado.Ninguna);
+    }
+
+    /// <summary>
+    /// Hablarle a alguien con misión: la primera vez te la da (y aparece el cofre), después te
+    /// recuerda que está en curso. Devuelve false si no hay nada de misión que decir, para que
+    /// siga con su charla normal. (Entregar o quedarse el objeto viene en la etapa 2.)
+    /// </summary>
+    private bool AtenderMision()
+    {
+        if (!TieneMision || Mision == null || wgMision == null) return false;
+
+        int hash = semillaPersona ^ 0x3F1;
+        RegistroMisiones.Mision m = RegistroMisiones.Buscar(macroVivienda, indiceHabitante);
+        if (m != null)
+        {
+            if (m.estado != RegistroMisiones.Estado.Aceptada) return false;
+            MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesEnCurso, hash)}");
+            return true;
+        }
+
+        GameObject cofre = wgMision.SpawnCofreMision(macroVivienda, Mision, semillaPersona, out Vector3Int celdaCofre);
+        if (cofre == null) return false; // no hubo lugar: queda con su "!" para otra vez
+
+        RegistroMisiones.Aceptar(Mision, macroVivienda, indiceHabitante, celdaCofre, cofre);
+        ActualizarIndicadorMision();
+        MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesPedido, hash)}");
+        return true;
+    }
+
+    /// <summary>ItemData del objeto que pide la misión (sale del InventoryItem de su prefab).</summary>
+    private ItemData DataPedida =>
+        Mision != null && Mision.objetoPedido != null && Mision.objetoPedido.TryGetComponent(out InventoryItem inv) ? inv.data : null;
+
+    /// <summary>
+    /// Si tenés en la mano el objeto que pide su misión en curso, devuelve el item (para el prompt
+    /// "[E] Entregar" y para entregarlo). Null si no.
+    /// </summary>
+    private InventoryItem ObjetoDeMisionEnMano(out RegistroMisiones.Mision mision)
+    {
+        mision = null;
+        if (!TieneMision) return null;
+
+        RegistroMisiones.Mision m = RegistroMisiones.Buscar(macroVivienda, indiceHabitante);
+        if (m == null || m.estado != RegistroMisiones.Estado.Aceptada) return null;
+
+        ManoJugador mano = FindAnyObjectByType<ManoJugador>();
+        InventoryItem item = mano != null ? mano.ItemEnMano : null;
+        if (item == null || item.data == null || item.data != DataPedida) return null;
+
+        mision = m;
+        return item;
+    }
+
+    /// <summary>
+    /// Entregar = mirarlo con el objeto pedido en la mano y apretar [E]: se lo queda, misión
+    /// completada como entregada (+karma).
+    /// </summary>
+    private bool IntentarEntregarDeMano()
+    {
+        InventoryItem item = ObjetoDeMisionEnMano(out RegistroMisiones.Mision m);
+        if (item == null) return false;
+
+        Destroy(item.gameObject);
+        RegistroMisiones.Completar(m, true);
+        ActualizarIndicadorMision();
+        MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesAgradecimiento, semillaPersona ^ 0x7A1)}");
+        return true;
+    }
+
     private void MostrarDialogo(string texto)
     {
         if (DialogoUI.Instance != null)
             DialogoUI.Instance.Mostrar(texto, transform);
-        else
-            Debug.Log($"[HabitanteRutina] {texto}");
     }
 
     /// <summary>
@@ -619,7 +761,19 @@ public class HabitanteRutina : MonoBehaviour
 
         ActualizarInteraccion();
 
-        float t = Mathf.Repeat(Reloj() + desfase, duracionCiclo);
+        // La rutina es función del reloj: mientras te atiende, lo que avanza el reloj se le descuenta
+        // al desfase, así al soltarte sigue exactamente donde quedó en vez de "saltar" adelante.
+        float ahora = Reloj();
+        if (atendiendo)
+        {
+            desfase -= ahora - relojAnterior;
+            relojAnterior = ahora;
+            ActualizarAtencion();
+            return;
+        }
+        relojAnterior = ahora;
+
+        float t = Mathf.Repeat(ahora + desfase, duracionCiclo);
         Vector3 pos = transform.position;
         Vector3 mirar = transform.forward;
 
@@ -693,5 +847,57 @@ public class HabitanteRutina : MonoBehaviour
         return lejos * Mathf.Min(radioEsquive - dist, esquiveMaximo);
     }
 
-    void OnEnable() => primerFrame = true;
+    // ---------- Atender al jugador mientras le habla ----------
+
+    private bool atendiendo;
+    private float relojAnterior;
+    private float tiempoSinMirada;
+
+    private void EmpezarAtencion()
+    {
+        if (!atendiendo) relojAnterior = Reloj();
+        atendiendo = true;
+        tiempoSinMirada = 0f;
+        Caminando = false;
+    }
+
+    /// <summary>
+    /// Quieto, girado hacia vos. Si dejás de mirarlo cuenta esperaAlDejarDeMirar segundos (y vuelve
+    /// a contar de cero si lo volvés a mirar); si te alejás demasiado, se suelta al toque.
+    /// </summary>
+    private void ActualizarAtencion()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) { atendiendo = false; return; }
+
+        Vector3 aJugador = cam.transform.position - transform.position;
+        aJugador.y = 0f;
+        if (aJugador.magnitude > alcanceInteraccion * multiplicadorDistanciaAtencion) { atendiendo = false; return; }
+
+        if (JugadorLoMira(cam, alcanceInteraccion * multiplicadorDistanciaAtencion)) tiempoSinMirada = 0f;
+        else
+        {
+            tiempoSinMirada += Time.deltaTime;
+            if (tiempoSinMirada >= esperaAlDejarDeMirar) { atendiendo = false; return; }
+        }
+
+        if (aJugador.sqrMagnitude > 1e-4f)
+        {
+            Quaternion objetivo = Quaternion.LookRotation(aJugador.normalized, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, objetivo, Time.deltaTime * velocidadGiro);
+        }
+    }
+
+    private bool JugadorLoMira(Camera cam, float alcance)
+    {
+        Ray ray = new Ray(cam.transform.position, cam.transform.forward);
+        return Physics.Raycast(ray, out RaycastHit hit, alcance, ~0, QueryTriggerInteraction.Collide)
+            && (hit.transform == transform || hit.transform.IsChildOf(transform));
+    }
+
+    void OnEnable()
+    {
+        primerFrame = true;
+        atendiendo = false; // si lo apagó la burbuja mientras te hablaba, vuelve a su rutina
+    }
 }

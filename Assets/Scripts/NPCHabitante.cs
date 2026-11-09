@@ -225,7 +225,6 @@ public class NPCHabitante : MonoBehaviour
         }
         else
         {
-            Debug.Log($"[NPC] {texto}");
             tiempoFinEscucha = Time.time; // sin UI, se acepta en el proximo frame
         }
     }

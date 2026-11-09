@@ -49,6 +49,9 @@ public class AmbientSounds : MonoBehaviour
     public AudioClip clipBase;
     [Range(0f, 1f)]
     public float volumenBase = 0.4f;
+    [Tooltip("Multiplicador del sonido base mientras estás dentro de una vivienda (comunidad). 0 = se corta, 1 = igual que en los pasillos.")]
+    [Range(0f, 1f)]
+    public float factorBaseEnVivienda = 0.25f;
     public float duracionFadeIn = 3f;
     [Tooltip("Segundos de silencio DESPUÉS de que termina el recorrido de cámara del menú y la cámara se pega al personaje, antes de que arranque el fade in. El ambiente entrando justo en el frame en que agarrás el control se siente automático; un par de segundos de nada primero hace que se note cuando aparece.\n\nSe mide desde que ModoMenu.Activo pasa a false, así que funciona igual con el viaje de cámara activado o desactivado. En una escena sin menú arranca de una.")]
     public float retrasoDespuesDelMenu = 1.5f;
@@ -86,6 +89,8 @@ public class AmbientSounds : MonoBehaviour
     public CapaAmbiente[] capas;
     [Tooltip("Cada cuánto se re-evalúa el contexto. No hace falta cada frame: preguntar en qué tipo de chunk estás cuesta más que un bool.")]
     public float intervaloEvaluacionContexto = 0.25f;
+    [Tooltip("Solo lectura, en Play: qué detecta el ambiente ahora (dentro/fuera, tipo de chunk, contextos y volumen de cada fuente). Para depurar por qué algo no suena.")]
+    [SerializeField] private string debugEstado;
 
     [Header("Contexto: Quieto")]
     [Tooltip("Segundos sin moverte para que se considere que estás QUIETO. Es el gancho para el ambiente de 'te frenaste a escuchar'.")]
@@ -262,6 +267,25 @@ public class AmbientSounds : MonoBehaviour
         if (trepando) contextosActivos.Add(ContextoAmbiente.Trepando);
 
         if (tiempoSinMoverse >= segundosParaQuieto) contextosActivos.Add(ContextoAmbiente.Quieto);
+
+        int tipoChunk = worldGen != null ? worldGen.TipoMacroChunkEnPosicion(jugadorTransform.position) : -1;
+        var sb = new System.Text.StringBuilder();
+        sb.Append(jugadorDentro ? "DENTRO" : "FUERA").Append(" · tipo ").Append(tipoChunk)
+          .Append(" · [").Append(string.Join(",", contextosActivos)).Append("]")
+          .Append(" · base ").Append(fuenteBase.volume.ToString("0.000"))
+          .Append(" ext ").Append(fuenteExterior.volume.ToString("0.000"))
+          .Append(" duck ").Append(factorDuckingActual.ToString("0.00"));
+        if (capas != null)
+            foreach (CapaAmbiente capa in capas)
+                if (capa != null && capa.fuente != null)
+                    sb.Append(" · ").Append(capa.nombre).Append(' ').Append(capa.fuente.volume.ToString("0.000"))
+                      .Append(" obj ").Append(capa.volumen.ToString("0.00"))
+                      .Append(" ctx ").Append(capa.contexto)
+                      .Append(" vel ").Append(capa.velocidadFade.ToString("0.00"))
+                      .Append(" clip ").Append(capa.fuente.clip != null ? capa.fuente.clip.name : "NINGUNO")
+                      .Append(capa.fuente.isPlaying ? "" : " (PARADA)");
+        sb.Append(" · timeScale ").Append(Time.timeScale.ToString("0.00"));
+        debugEstado = sb.ToString();
     }
 
     /// <summary>
@@ -302,7 +326,10 @@ public class AmbientSounds : MonoBehaviour
             capa.activaAntes = activa;
 
             float objetivo = (activa ? capa.volumen : 0f) * factorFadeIn;
-            capa.fuente.volume = Mathf.Lerp(capa.fuente.volume, objetivo, Time.deltaTime * Mathf.Max(0.01f, capa.velocidadFade));
+            // 0 en el Inspector dejaba la capa muda para siempre (el Lerp casi no avanza): se toma
+            // como "sin configurar" y usa la velocidad por defecto.
+            float velocidad = capa.velocidadFade > 0f ? capa.velocidadFade : 1.5f;
+            capa.fuente.volume = Mathf.Lerp(capa.fuente.volume, objetivo, Time.deltaTime * velocidad);
         }
     }
 
@@ -343,7 +370,9 @@ public class AmbientSounds : MonoBehaviour
         // el otro "callate un rato") y se combinan sin pisarse.
         factorFadeIn *= factorDuckingActual;
 
-        float volumenObjetivoBase     = (jugadorDentro ? volumenBase     : 0f) * factorFadeIn;
+        // En la vivienda el base baja: la comunidad tiene su propio ambiente (capa Vivienda).
+        float factorVivienda          = contextosActivos.Contains(ContextoAmbiente.Vivienda) ? factorBaseEnVivienda : 1f;
+        float volumenObjetivoBase     = (jugadorDentro ? volumenBase * factorVivienda : 0f) * factorFadeIn;
         float volumenObjetivoExterior = (jugadorDentro ? 0f              : volumenExterior) * factorFadeIn;
 
         fuenteBase.volume     = Mathf.Lerp(fuenteBase.volume,     volumenObjetivoBase,     Time.deltaTime * velocidadCrossfade);
@@ -389,7 +418,13 @@ public class AmbientSounds : MonoBehaviour
 
         Vector3 origen = jugadorTransform.position + Vector3.up * 0.5f; // pequeño offset para evitar el propio collider
         bool hayTecho = Physics.Raycast(origen, Vector3.up, alturaDeteccionTecho, capasEstructura, QueryTriggerInteraction.Ignore);
-        jugadorDentro = hayTecho;
+
+        // La comunidad tiene el techo a 60-80 m, muy por encima de alturaDeteccionTecho: el raycast
+        // no lo alcanza y se tomaba como exterior. Estar en su macro chunk ya es estar adentro.
+        bool enComunidad = worldGen != null
+            && WorldGenerator.EsTipoComunidad(worldGen.TipoMacroChunkEnPosicion(jugadorTransform.position));
+
+        jugadorDentro = hayTecho || enComunidad;
     }
 
     private void ControlarVientoDelVacio()
