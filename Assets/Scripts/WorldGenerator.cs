@@ -455,6 +455,21 @@ public class WorldGenerator : MonoBehaviour
     [Range(0f, 1f)]
     public float probabilidadMordiscoComunidad = 0.6f;
 
+    [Header("Pilares de la Comunidad")]
+    [Tooltip("Prefab del pilar (1 celda de alto, pivote abajo al centro). Se apila piso por piso hasta el techo más bajo de las 4 celdas que lo rodean. Vacío = sin pilares.")]
+    public GameObject prefabPilarComunidad;
+    [Tooltip("Cuántos pilares por comunidad (mín/máx). Van en vértices interiores de la planta, nunca en el borde ni dos pegados.")]
+    public Vector2Int pilaresPorComunidad = new Vector2Int(1, 2);
+
+    [Header("Andamios de la Comunidad (debug)")]
+    [Tooltip("Dibuja en el Game esferas en los puntos donde irían plataformas de andamio, solo en la comunidad donde estás.")]
+    public bool dibujarPuntosAndamio = true;
+    [Tooltip("Cuántos puntos por piso de la grilla (mín/máx), desde el segundo piso para arriba.")]
+    public Vector2Int puntosAndamioPorPiso = new Vector2Int(1, 3);
+    [Tooltip("Probabilidad (0 a 1) de que un piso se salte y no tenga ningún punto.")]
+    [Range(0f, 1f)]
+    public float probabilidadSaltarPisoAndamio = 0.25f;
+
     [Header("Habitantes con Rutina (gente que vive en la vivienda)")]
     [Tooltip("Prefabs de las personas que viven en cada vivienda y caminan por su planta baja. Cada prefab necesita el componente HabitanteRutina (ahí se ajustan velocidad, paradas y tiempos). Se elige uno por persona, determinista por semilla. Vacío = sistema apagado.")]
     public GameObject[] prefabsHabitantesRutina;
@@ -545,6 +560,9 @@ public class WorldGenerator : MonoBehaviour
 
     void Start()
     {
+        // Dibujante de los puntos de andamio: se agrega solo, se prende/apaga con dibujarPuntosAndamio.
+        if (GetComponent<DebugAndamiosComunidad>() == null) gameObject.AddComponent<DebugAndamiosComunidad>();
+
         // El toggle de debug manda sobre el guardado: si no, cargar la partida te devolvía a donde
         // estabas y el spawn en cuartel nunca llegaba a calcularse.
         if (!AlgunSpawnDebug && cargarPartidaAlIniciar && SistemaGuardado.Cargar(out int seedGuardada, out Vector3 posGuardada, out rotYGuardada))
@@ -2233,6 +2251,156 @@ public class WorldGenerator : MonoBehaviour
         }
     }
 
+    // ---------- Pilares de la comunidad ----------
+
+    /// <summary>
+    /// Pone de 1 a N pilares en VÉRTICES interiores de la planta (la esquina compartida por 4
+    /// celdas), nunca en el borde de la sala. Un vértice vale si sus 4 celdas están huecas en planta
+    /// baja; el pilar se apila piso por piso mientras las 4 sigan huecas, así no atraviesa ningún
+    /// techo escalonado. Dos pilares nunca quedan en vértices pegados.
+    /// </summary>
+    private void InstanciarPilaresComunidad(Vector3Int celdaCentral, Vector3Int macro)
+    {
+        if (prefabPilarComunidad == null) return;
+
+        int s = macroSize;
+        Vector3Int b = macro * s;
+        var rng = new System.Random(semillaDelMundo ^ (macro.x * 52361) ^ (macro.y * 33377) ^ (macro.z * 74531) ^ 0x7111);
+
+        bool CuatroHuecas(int vx, int vz, int ly) =>
+            IsCellEmpty(b.x + vx - 1, b.y + ly, b.z + vz - 1) && IsCellEmpty(b.x + vx, b.y + ly, b.z + vz - 1) &&
+            IsCellEmpty(b.x + vx - 1, b.y + ly, b.z + vz) && IsCellEmpty(b.x + vx, b.y + ly, b.z + vz);
+
+        var candidatos = new List<Vector2Int>();
+        for (int vx = 1; vx < s; vx++)
+            for (int vz = 1; vz < s; vz++)
+                if (CuatroHuecas(vx, vz, 1)) candidatos.Add(new Vector2Int(vx, vz));
+
+        for (int i = candidatos.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (candidatos[i], candidatos[j]) = (candidatos[j], candidatos[i]);
+        }
+
+        int minP = Mathf.Max(0, Mathf.Min(pilaresPorComunidad.x, pilaresPorComunidad.y));
+        int maxP = Mathf.Max(minP, Mathf.Max(pilaresPorComunidad.x, pilaresPorComunidad.y));
+        int objetivo = rng.Next(minP, maxP + 1);
+
+        var puestos = new List<Vector2Int>();
+        foreach (Vector2Int v in candidatos)
+        {
+            if (puestos.Count >= objetivo) break;
+            bool pegado = false;
+            foreach (Vector2Int p in puestos)
+                if (Mathf.Abs(p.x - v.x) <= 1 && Mathf.Abs(p.y - v.y) <= 1) { pegado = true; break; }
+            if (pegado) continue;
+            puestos.Add(v);
+
+            for (int ly = 1; ly < s && CuatroHuecas(v.x, v.y, ly); ly++)
+            {
+                // Vértice = punto medio entre los centros de dos celdas en diagonal, a la altura del piso.
+                Vector3 pos = (CeldaACentroMundoPiso(new Vector3Int(b.x + v.x - 1, b.y + ly, b.z + v.y - 1)) +
+                               CeldaACentroMundoPiso(new Vector3Int(b.x + v.x, b.y + ly, b.z + v.y))) * 0.5f;
+                GameObject go = Instantiate(prefabPilarComunidad, pos, Quaternion.identity, transform);
+                go.name = $"{prefabPilarComunidad.name} · comunidad {macro} · vértice {v} · piso {ly}";
+                go.SetActive(false); // lo prende la burbuja junto con la celda central
+                RegistrarEnCelda(celdaCentral, go);
+            }
+        }
+    }
+
+    // ---------- Puntos de andamio de la comunidad (por ahora solo para verlos) ----------
+
+    public struct PuntoAndamio
+    {
+        public Vector3Int celda;     // celda hueca de la comunidad a la que se pega la plataforma
+        public Vector3 posicion;     // sobre la pared, a la altura del piso de esa celda
+        public Vector3 normal;       // hacia adentro de la sala
+    }
+
+    /// <summary>
+    /// Dónde irían las plataformas colgadas de andamio de una comunidad: solo en paredes, desde el
+    /// segundo piso de la grilla para arriba. Por piso salen de 1 a 3 (o se salta el piso al azar),
+    /// prefiriendo paredes distintas. Ningún punto queda pegado a otro: ni al lado, ni encima, ni
+    /// en diagonal (siempre al menos una celda de por medio). Determinista por semilla + macro.
+    /// </summary>
+    public List<PuntoAndamio> PuntosAndamioComunidad(Vector3Int macro)
+    {
+        var res = new List<PuntoAndamio>();
+        if (!EsTipoComunidad(ObtenerTipoMacroChunk(macro.x, macro.y, macro.z))) return res;
+
+        int s = macroSize;
+        Vector3Int b = macro * s;
+        Vector3Int[] dirs = { Vector3Int.forward, Vector3Int.right, Vector3Int.back, Vector3Int.left };
+        var rng = new System.Random(semillaDelMundo ^ (macro.x * 28411) ^ (macro.y * 61463) ^ (macro.z * 10267) ^ 0x2AD0);
+
+        int minP = Mathf.Max(1, Mathf.Min(puntosAndamioPorPiso.x, puntosAndamioPorPiso.y));
+        int maxP = Mathf.Max(minP, Mathf.Max(puntosAndamioPorPiso.x, puntosAndamioPorPiso.y));
+
+        var elegidas = new List<Vector3Int>();
+        var candidatos = new List<(Vector3Int celda, int dir)>();
+        var paredesUsadas = new HashSet<int>();
+
+        for (int ly = 2; ly < s; ly++)
+        {
+            if (rng.NextDouble() < probabilidadSaltarPisoAndamio) continue;
+
+            candidatos.Clear();
+            for (int lx = 0; lx < s; lx++)
+                for (int lz = 0; lz < s; lz++)
+                {
+                    Vector3Int c = b + new Vector3Int(lx, ly, lz);
+                    if (!IsCellEmpty(c.x, c.y, c.z)) continue;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        Vector3Int n = c + dirs[d];
+                        if (!IsCellEmpty(n.x, n.y, n.z)) candidatos.Add((c, d)); // del otro lado hay pared
+                    }
+                }
+
+            for (int i = candidatos.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (candidatos[i], candidatos[j]) = (candidatos[j], candidatos[i]);
+            }
+
+            int objetivo = rng.Next(minP, maxP + 1);
+            int puestosEnPiso = 0;
+            paredesUsadas.Clear();
+
+            // Primera pasada: solo paredes que este piso todavía no usó. Segunda: cualquiera, que
+            // igual respeta la celda de separación.
+            for (int pasada = 0; pasada < 2 && puestosEnPiso < objetivo; pasada++)
+            {
+                foreach (var (c, d) in candidatos)
+                {
+                    if (puestosEnPiso >= objetivo) break;
+                    int plano = (d % 2 == 0) ? c.z : c.x;             // forward/back = plano Z, right/left = plano X
+                    int pared = d * 100000 + plano;
+                    if (pasada == 0 && paredesUsadas.Contains(pared)) continue;
+
+                    bool pegada = false;
+                    foreach (Vector3Int e in elegidas)
+                        if (Mathf.Abs(e.x - c.x) <= 1 && Mathf.Abs(e.y - c.y) <= 1 && Mathf.Abs(e.z - c.z) <= 1) { pegada = true; break; }
+                    if (pegada) continue;
+
+                    elegidas.Add(c);
+                    paredesUsadas.Add(pared);
+                    puestosEnPiso++;
+
+                    Vector3 dir = new Vector3(dirs[d].x, 0f, dirs[d].z);
+                    res.Add(new PuntoAndamio
+                    {
+                        celda = c,
+                        posicion = CeldaACentroMundoPiso(c) + dir * (cellSize * 0.5f),
+                        normal = -dir
+                    });
+                }
+            }
+        }
+        return res;
+    }
+
     // ---------- Forma de las comunidades ----------
     //
     // La comunidad (el lugar donde vive la gente) es un mapa de alturas sobre su planta de 5x5: cada
@@ -3303,7 +3471,10 @@ public class WorldGenerator : MonoBehaviour
         // Vale para viviendas y comunidades por igual: es el lugar donde vive la gente, y el
         // recorrido sale de las celdas caminables reales de cada una.
         if (EsTipoComunidad(tipo) && lx == 2 && ly == 1 && lz == 2)
+        {
             InstanciarHabitantesRutina(celda, new Vector3Int(mx, my, mz));
+            InstanciarPilaresComunidad(celda, new Vector3Int(mx, my, mz));
+        }
 
         if (EsTipoConRoomData(tipo) && lx == 2 && ly == 1 && lz == 2)
         {

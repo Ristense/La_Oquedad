@@ -13,5 +13,7 @@ MonoBehaviour:
   m_Name: General_FrasesProfesion
   m_EditorClassIdentifier: Assembly-CSharp::FrasesProfesion
   profesion: 4
-  frasesNormal: []
-  frasesNecesidad: []
+  frasesNormal:
+  - Es dificil encontrar recursos aqui.. si no fuera por los exploradores.
+  frasesNecesidad:
+  - 
