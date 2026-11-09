@@ -446,6 +446,21 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("En el casco (la cara EXTERNA de la cáscara: paredes, panza y coronación) poner siempre la piel exterior, ignorando probabilidadParedExterior/PisoExterior/TechoExterior. Con los valores por defecto (0.18 y 0.5) el casco saldría parchado, con agujeros por donde se ve la cara de atrás. Apagalo si querés un casco deliberadamente incompleto/en ruinas.")]
     public bool cascoColosalSiempreConPielExterior = true;
 
+    [Header("Forma de las Comunidades (donde vive la gente)")]
+    [Tooltip("ON = cada comunidad tiene su propia silueta por bloques, tipo tetris: techos a distintas alturas y esquinas mordidas en planta. El 3x3 interior de la planta baja (centro + secciones) y las 4 puertas no se tapan nunca. Todo determinista por semilla.\n\nOFF = el cubo hueco de 5x5 de siempre.")]
+    public bool viviendasFormaVariable = true;
+    [Tooltip("Altura en pisos (1 a 4) que puede tomar cada bloque de la planta. El bloque del centro siempre llega arriba. Rango bajo = techos más bajos y escalones más marcados.")]
+    public Vector2Int pisosPorBloqueComunidad = new Vector2Int(1, 4);
+    [Tooltip("Probabilidad (0 a 1) de que cada esquina de la planta se muerda (se tapa entera o queda una L). Es lo que rompe el cuadrado visto desde adentro.")]
+    [Range(0f, 1f)]
+    public float probabilidadMordiscoComunidad = 0.6f;
+
+    [Header("Habitantes con Rutina (gente que vive en la vivienda)")]
+    [Tooltip("Prefabs de las personas que viven en cada vivienda y caminan por su planta baja. Cada prefab necesita el componente HabitanteRutina (ahí se ajustan velocidad, paradas y tiempos). Se elige uno por persona, determinista por semilla. Vacío = sistema apagado.")]
+    public GameObject[] prefabsHabitantesRutina;
+    [Tooltip("Cuántas personas con rutina viven en cada vivienda.")]
+    [Range(0, 20)] public int habitantesPorVivienda = 2;
+
     [Header("Viviendas y Cuarteles por Isla")]
     [Tooltip("Cuántas SALAS CHICAS tiene cada isla, mínimo y máximo — y el cuartel garantizado CUENTA como una. Con (2,4): siempre el cuartel + 1 a 3 viviendas. Antes no había tope: cada chunk del núcleo tiraba los dados por su cuenta, así que una isla grande y maciza podía llenarse de decenas de viviendas (y cada una cuesta prefab + NPC + items en RAM). Los chunks del núcleo que NO salen elegidos pasan a intersecciones/pozos (5,6,8), así que la isla no queda hueca.")]
     public Vector2Int salasPorIsla = new Vector2Int(2, 4);
@@ -560,6 +575,7 @@ public class WorldGenerator : MonoBehaviour
         // La semilla/offsets quedaron fijos: invalidar los cachés de generación
         celdasNoDescargables.Clear();
         cacheTipoChunk.Clear();
+        cacheFormaComunidad.Clear();
         cacheCeldaVacia.Clear();
         cacheDirBalcon.Clear();
         cacheCierre.Clear();
@@ -1053,6 +1069,7 @@ public class WorldGenerator : MonoBehaviour
 
         celdasNoDescargables.Clear();
         cacheTipoChunk.Clear();
+        cacheFormaComunidad.Clear();
         cacheCeldaVacia.Clear();
         cacheDirBalcon.Clear();
         cacheCierre.Clear();
@@ -2184,6 +2201,111 @@ public class WorldGenerator : MonoBehaviour
         return vacia;
     }
 
+    /// <summary>
+    /// Instancia a las personas que viven en la vivienda y les arma la rutina. Se registran en la
+    /// celda central, así se descargan y regeneran con ella.
+    /// </summary>
+    private void InstanciarHabitantesRutina(Vector3Int celdaCentral, Vector3Int macro)
+    {
+        Debug.Log($"[Habitantes] vivienda {macro}: prefabs={(prefabsHabitantesRutina == null ? "null" : prefabsHabitantesRutina.Length.ToString())}, por vivienda={habitantesPorVivienda}");
+        if (prefabsHabitantesRutina == null || prefabsHabitantesRutina.Length == 0) return;
+        if (habitantesPorVivienda <= 0) return;
+
+        var rng = new System.Random(semillaDelMundo ^ (macro.x * 40503) ^ (macro.y * 13931) ^ (macro.z * 91711));
+        for (int i = 0; i < habitantesPorVivienda; i++)
+        {
+            GameObject prefab = prefabsHabitantesRutina[rng.Next(prefabsHabitantesRutina.Length)];
+            if (prefab == null) continue;
+
+            GameObject go = Instantiate(prefab, CeldaACentroMundoPiso(celdaCentral), Quaternion.identity, transform);
+            HabitanteRutina rutina = go.GetComponent<HabitanteRutina>();
+            if (rutina == null)
+            {
+                Debug.LogWarning($"[Habitantes] El prefab '{prefab.name}' no tiene HabitanteRutina: no sabe adónde caminar. Se descarta.");
+                Destroy(go);
+                continue;
+            }
+            rutina.Inicializar(this, macro, i);
+            go.name = $"{prefab.name} · vivienda {macro} · #{i}";
+            go.SetActive(false); // lo prende la burbuja junto con el resto de la celda
+            RegistrarEnCelda(celdaCentral, go);
+            Debug.Log($"[Habitantes] creado '{go.name}' en {go.transform.position}");
+        }
+    }
+
+    // ---------- Forma de las comunidades ----------
+    //
+    // La comunidad (el lugar donde vive la gente) es un mapa de alturas sobre su planta de 5x5: cada
+    // columna (lx, lz) queda hueca desde ly=1 hasta su altura, y sólida de ahí para arriba. Altura 0
+    // = la columna entera queda sólida (un mordisco en la planta).
+    //
+    // Las alturas se reparten por BLOQUES, no celda a celda, para que salgan piezas definidas tipo
+    // tetris y no un serrucho. La planta se parte en 3x3 bloques: las bandas son {0,1}, {2}, {3,4}.
+    // Así los bloques de esquina son de 2x2, los de lado de 1x2 y el del centro es una sola celda.
+    private readonly Dictionary<Vector3Int, int[]> cacheFormaComunidad = new Dictionary<Vector3Int, int[]>();
+
+    private static int BandaComunidad(int l) => l < 2 ? 0 : (l == 2 ? 1 : 2);
+
+    /// <summary>
+    /// Altura (en pisos, 0..macroSize-1) de cada columna de la comunidad, índice lx*macroSize+lz.
+    /// Determinista por semilla + macro chunk.
+    ///
+    /// Lo que NUNCA se tapa en planta baja: el 3x3 interior (centro + las 4 zonas de secciones) y
+    /// las 4 puertas del centro de cada lado. Todo lo demás de la planta baja son las 12 celdas del
+    /// anillo de afuera, y las de cada esquina se pueden morder.
+    ///
+    /// ⚠️ Usa su propio System.Random: esto se llama desde CalcularCeldaVacia, en medio de cualquier
+    /// otro sorteo de la generación, y no puede moverle el UnityEngine.Random global.
+    /// </summary>
+    private int[] FormaComunidad(int mx, int my, int mz)
+    {
+        Vector3Int k = new Vector3Int(mx, my, mz);
+        if (cacheFormaComunidad.TryGetValue(k, out int[] cacheada)) return cacheada;
+
+        int s = macroSize;
+        int techo = s - 1;
+        int[] altura = new int[s * s];
+        for (int i = 0; i < altura.Length; i++) altura[i] = techo;
+
+        if (viviendasFormaVariable)
+        {
+            var rng = new System.Random(semillaDelMundo ^ (mx * 73471) ^ (my * 19973) ^ (mz * 51749) ^ 0x5A17);
+
+            int minP = Mathf.Clamp(Mathf.Min(pisosPorBloqueComunidad.x, pisosPorBloqueComunidad.y), 1, techo);
+            int maxP = Mathf.Clamp(Mathf.Max(pisosPorBloqueComunidad.x, pisosPorBloqueComunidad.y), minP, techo);
+
+            // 1. Altura de cada bloque. El del centro siempre llega arriba: ahí está la estructura
+            //    central y es el eje que se ve desde toda la sala.
+            int[] alturaBloque = new int[9];
+            for (int b = 0; b < 9; b++) alturaBloque[b] = b == 4 ? techo : rng.Next(minP, maxP + 1);
+
+            for (int lx = 0; lx < s; lx++)
+                for (int lz = 0; lz < s; lz++)
+                    altura[lx * s + lz] = alturaBloque[BandaComunidad(lx) * 3 + BandaComunidad(lz)];
+
+            // 2. Mordiscos en planta: en cada esquina, las 3 celdas del anillo (la esquina y sus dos
+            //    brazos) se pueden tapar enteras, o dejar solo un brazo para que quede una L.
+            //    La celda interior del bloque (zona de sección) no se toca nunca.
+            int[,] esquinas = { { 0, 0 }, { 0, techo }, { techo, 0 }, { techo, techo } };
+            for (int e = 0; e < 4; e++)
+            {
+                if (rng.NextDouble() >= probabilidadMordiscoComunidad) continue;
+
+                int ex = esquinas[e, 0], ez = esquinas[e, 1];
+                int px = ex == 0 ? 1 : techo - 1;   // fila/columna de adentro
+                int pz = ez == 0 ? 1 : techo - 1;
+
+                altura[ex * s + ez] = 0;            // la esquina del anillo siempre se va
+                int brazo = rng.Next(3);            // 0 = se van los dos brazos, 1/2 = queda uno (L)
+                if (brazo != 1) altura[ex * s + pz] = 0;
+                if (brazo != 2) altura[px * s + ez] = 0;
+            }
+        }
+
+        cacheFormaComunidad[k] = altura;
+        return altura;
+    }
+
     private bool CalcularCeldaVacia(int x, int y, int z)
     {
         // 1. Coordenadas del Macro Chunk
@@ -2246,10 +2368,10 @@ public class WorldGenerator : MonoBehaviour
 
         switch (tipo)
         {
-            case 1: // Sala Grande (Con Altillo/Balcón)
-                if (ly == 1) 
+            case 1: // Sala Chica = cuartel de centinelas (la gente NO vive acá: vive en la comunidad)
+                if (ly == 1)
                     return lx > 0 && lx < 4 && lz > 0 && lz < 4; // Piso 1 hueco 3x3
-                if (ly == 2) 
+                if (ly == 2)
                     return lx == 2 && lz == 2; // Piso 2 es balcón: solo el centro es hueco
                 if (ly == 3)
                     return lx > 0 && lx < 4 && lz > 0 && lz < 4; // Piso 3 hueco 3x3
@@ -2279,7 +2401,10 @@ public class WorldGenerator : MonoBehaviour
                 // La Sala Grande depende de sus vecinos para tener paredes: donde toca el vacío
                 // queda abierta. Una casa no puede quedar destapada, así que donde el vecino no
                 // aporta pared la comunidad pone su propia cáscara.
-                return ly > 0 && !EsCascaraComunidad(mx, my, mz, lx, ly, lz);
+                // Encima, la silueta: cada columna es hueca solo hasta su altura (FormaComunidad).
+                return ly > 0
+                    && ly <= FormaComunidad(mx, my, mz)[lx * macroSize + lz]
+                    && !EsCascaraComunidad(mx, my, mz, lx, ly, lz);
 
             case 8: // Intersección T
                 return ly == 1 && (lx == 2 || (lz == 2 && lx >= 2));
@@ -2532,14 +2657,17 @@ public class WorldGenerator : MonoBehaviour
     /// las 4 celdas esquina replican el MISMO barajado por separado y cada una sabe qué le toca
     /// sin comunicarse entre sí (mismo patrón de "predictores por hash" del resto del generador).
     /// </summary>
-    private void IntentarGenerarSeccionVivienda(int mx, int my, int mz, Vector3Int celda, Vector3 origin, int x, int y, int z, int lx, int lz)
+    /// <summary>
+    /// Qué sección va en cada ZONA de la vivienda: orden[zona] = sección (0=Agua, 1=Comida,
+    /// 2=Batería, 3=Dormir). Las zonas son las celdas locales (1,1), (3,1), (1,3) y (3,3), en ese
+    /// orden.
+    ///
+    /// ⚠️ Es la ÚNICA fuente de este reparto. La usan tanto quien coloca las secciones como los
+    /// habitantes que van a trabajar a la suya. Antes cada uno tenía su propia copia del barajado, y
+    /// si alguien tocaba una sin la otra, la gente se iba a la zona equivocada sin ningún aviso.
+    /// </summary>
+    private int[] OrdenZonasSecciones(int mx, int my, int mz)
     {
-        RoomData sala = ObtenerRoomDataParaMacro(mx, my, mz);
-        if (sala == null) return;
-
-        GameObject[] secciones = { sala.seccionAgua, sala.seccionComida, sala.seccionBateria, sala.seccionDormir };
-
-        // Barajar el orden de las secciones (Fisher-Yates) con el hash del macro chunk
         int hashMacro = semillaDelMundo + mx * 55103 + my * 71317 + mz * 90379;
         Random.State prev = Random.state;
         Random.InitState(hashMacro);
@@ -2551,10 +2679,37 @@ public class WorldGenerator : MonoBehaviour
             (orden[i], orden[j]) = (orden[j], orden[i]);
         }
         Random.state = prev;
+        return orden;
+    }
 
-        // Índice de esta esquina en el orden fijo (1,1) (3,1) (1,3) (3,3)
-        int idxEsquina = (lx == 1 ? 0 : 1) + (lz == 1 ? 0 : 2);
-        GameObject prefabSeccion = secciones[orden[idxEsquina]];
+    /// <summary>Índice de zona (0..3) de una celda local, en el orden de OrdenZonasSecciones.</summary>
+    private static int IndiceZona(int lx, int lz) => (lx == 1 ? 0 : 1) + (lz == 1 ? 0 : 2);
+
+    /// <summary>
+    /// En qué zona (celda local lx, lz) quedó una sección (0=Agua, 1=Comida, 2=Batería, 3=Dormir)
+    /// de la vivienda de ese macro chunk.
+    /// </summary>
+    public Vector2Int ObtenerZonaDeSeccion(Vector3Int macro, int indiceSeccion)
+    {
+        int[] orden = OrdenZonasSecciones(macro.x, macro.y, macro.z);
+        for (int zona = 0; zona < 4; zona++)
+        {
+            if (orden[zona] != indiceSeccion) continue;
+            return new Vector2Int((zona & 1) == 0 ? 1 : 3, (zona & 2) == 0 ? 1 : 3);
+        }
+        return new Vector2Int(1, 1);
+    }
+
+    private void IntentarGenerarSeccionVivienda(int mx, int my, int mz, Vector3Int celda, Vector3 origin, int x, int y, int z, int lx, int lz)
+    {
+        RoomData sala = ObtenerRoomDataParaMacro(mx, my, mz);
+        if (sala == null) return;
+
+        GameObject[] secciones = { sala.seccionAgua, sala.seccionComida, sala.seccionBateria, sala.seccionDormir };
+
+        // Qué sección le toca a esta zona: la misma función que usan los habitantes para ir a la suya.
+        int[] orden = OrdenZonasSecciones(mx, my, mz);
+        GameObject prefabSeccion = secciones[orden[IndiceZona(lx, lz)]];
 
         InstanciarSeccion(prefabSeccion, celda, origin, x, y, z, RotacionSeccionEsquina(x, y, z, lx, lz));
     }
@@ -3142,6 +3297,14 @@ public class WorldGenerator : MonoBehaviour
         // Celda central de una sala con RoomData (cuartel o comunidad): prefab central (trae al
         // NPC), cartel, almacenamiento, loot, registro de la vivienda y cofre de misión.
         // TODO comunidad: esto es del 3x3 viejo; en la comunidad lo reemplaza la planta de 100x100.
+        // Habitantes con rutina: se instancian con la celda central de la vivienda y viven en su
+        // planta baja. Son sin estado (su posición sale del reloj), así que da igual cuántas veces
+        // la burbuja descargue y regenere esta celda.
+        // Vale para viviendas y comunidades por igual: es el lugar donde vive la gente, y el
+        // recorrido sale de las celdas caminables reales de cada una.
+        if (EsTipoComunidad(tipo) && lx == 2 && ly == 1 && lz == 2)
+            InstanciarHabitantesRutina(celda, new Vector3Int(mx, my, mz));
+
         if (EsTipoConRoomData(tipo) && lx == 2 && ly == 1 && lz == 2)
         {
             RoomData sala = ObtenerRoomDataParaMacro(mx, my, mz);
@@ -3277,9 +3440,12 @@ public class WorldGenerator : MonoBehaviour
         // La configuración (prefabs, cantidad, offset) vive en la RoomData asignada a este macro chunk.
         // Solo Sala Chica: en la comunidad no hay techo a la altura de ly==1 (la sala sube hasta
         // ly==4) y las luces quedarían flotando a media altura.
+        // Tampoco bajo un hueco de doble altura (forma variable de vivienda): ahí no hay techo en
+        // ly==1 y la luz quedaría colgando en el aire.
         if (tipo == 1 && ly == 1
             && lx >= 1 && lx <= 3 && lz >= 1 && lz <= 3
-            && !(lx == 2 && lz == 2))
+            && !(lx == 2 && lz == 2)
+            && !IsCellEmpty(x, y + 1, z))
         {
             RoomData salaLuces = ObtenerRoomDataParaMacro(mx, my, mz);
             if (salaLuces != null && salaLuces.generarLuces

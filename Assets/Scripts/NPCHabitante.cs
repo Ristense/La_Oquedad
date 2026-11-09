@@ -137,7 +137,24 @@ public class NPCHabitante : MonoBehaviour
         if (modeloPlaceholder != null) modeloPlaceholder.SetActive(false);
 
         Transform padre = puntoModelo != null ? puntoModelo : transform;
-        Instantiate(datos.habitante.prefabModelo, padre.position, padre.rotation, padre);
+        GameObject modelo = Instantiate(datos.habitante.prefabModelo, padre.position, padre.rotation, padre);
+
+        // ⚠️ El modelo tiene que ser SOLO lo visual. Si por error se asigna un prefab que trae su
+        // propio NPCHabitante (por ejemplo, el prefab del NPC mismo), ese NPC hijo resuelve su
+        // vivienda, instancia OTRO modelo, y así sin fin: un NPC nuevo por frame apilado en el
+        // mismo lugar, cada uno con su raycast. Se notaba como caída de FPS al mirarlo. Se apaga
+        // en el acto (enabled = false, para que no llegue a correr ni un Update) y se avisa.
+        NPCHabitante[] intrusos = modelo.GetComponentsInChildren<NPCHabitante>(true);
+        if (intrusos.Length > 0)
+        {
+            Debug.LogWarning($"[NPCHabitante] El 'Prefab Modelo' de '{datos.habitante.name}' ({datos.habitante.prefabModelo.name}) " +
+                             "trae un NPCHabitante adentro. Tiene que ser solo la malla. Se le apagó para evitar la recursión infinita.");
+            foreach (NPCHabitante n in intrusos)
+            {
+                n.enabled = false;
+                Destroy(n);
+            }
+        }
     }
 
     /// <summary>

@@ -5,6 +5,8 @@ public class TogglePantalla : MonoBehaviour
 {
     public GameObject pantalla;
     public KeyCode tecla = KeyCode.Tab;
+    [Tooltip("Segunda tecla que también abre y cierra esta pantalla (ej. B para la tablet, además del 1). None = solo la principal.")]
+    public KeyCode teclaAlternativa = KeyCode.None;
 
     [Header("Cursor (opcional)")]
     [Tooltip("ON = libera el cursor mientras la pantalla está abierta. Necesario si la pantalla tiene botones para clickear (ej. las pestañas de la bitácora dentro de la tablet). Dejalo OFF en pantallas que son solo lectura.")]
@@ -19,7 +21,8 @@ public class TogglePantalla : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetKeyDown(tecla) && pantalla != null)
+        bool apreto = Input.GetKeyDown(tecla) || (teclaAlternativa != KeyCode.None && Input.GetKeyDown(teclaAlternativa));
+        if (apreto && pantalla != null)
         {
             bool abrir = !pantalla.activeSelf;
             pantalla.SetActive(abrir);
