@@ -50,6 +50,9 @@ public class HabitanteRutina : MonoBehaviour
     public float probabilidadMision = 0.3f;
 
     /// <summary>¿Esta persona tiene una misión? Se decide en Inicializar, por semilla.</summary>
+    [Tooltip("Tecla para QUEDARTE con lo que pidió en vez de entregárselo (solo aparece con el objeto en la mano). La Q es del brazo.")]
+    public KeyCode teclaQuedarse = KeyCode.G;
+
     public bool TieneMision { get; private set; }
     public IndicadorMision Indicador { get; private set; }
     /// <summary>La misión que da (de Resources/Misiones), elegida por semilla. Null si no tiene.</summary>
@@ -424,9 +427,17 @@ public class HabitanteRutina : MonoBehaviour
                 if (permitirEntregarRecursoDirecto && JugadorSostieneRecursoDeEsteTrabajo(out _))
                     prompt = $"[E] Entregar suministro ({etiquetaRol})";
 
-                InventoryItem pedido = ObjetoDeMisionEnMano(out _);
+                InventoryItem pedido = ObjetoDeMisionEnMano(out RegistroMisiones.Mision misionEnMano);
                 if (pedido != null)
-                    prompt = $"[E] Entregar {pedido.data.nombreArticulo} ({etiquetaRol})";
+                    prompt = $"[E] Entregar {pedido.data.nombreArticulo}   [{teclaQuedarse}] Quedármelo ({etiquetaRol})";
+
+                // Quedárselo: solo con lo pedido en la mano (tiene que verte con el paquete para
+                // que sea una decisión). Cierra la misión como NO entregada y te quedás todo.
+                if (pedido != null && Input.GetKeyDown(teclaQuedarse))
+                {
+                    QuedarseConMision(misionEnMano);
+                    return;
+                }
 
                 if (TooltipManager.Instance != null)
                     TooltipManager.Instance.MostrarTooltip(gameObject, prompt);
@@ -574,6 +585,21 @@ public class HabitanteRutina : MonoBehaviour
             MostrarDialogo($"[{NombreRol()}] {frase} Todavía me falta: {m.DescribirFaltantes()}.");
         }
         return true;
+    }
+
+    /// <summary>
+    /// Te quedás con lo que pidió: la misión se cierra como no entregada (karmaQuedarse), los
+    /// objetos siguen siendo tuyos y él te lo hace saber.
+    /// </summary>
+    private void QuedarseConMision(RegistroMisiones.Mision m)
+    {
+        if (m == null || Mision == null) return;
+        if (TooltipManager.Instance != null) TooltipManager.Instance.OcultarTooltip();
+        EmpezarAtencion();
+
+        RegistroMisiones.Completar(m, false);
+        ActualizarIndicadorMision();
+        MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesRechazo, semillaPersona ^ 0x0BAD)}");
     }
 
     private void MostrarDialogo(string texto)

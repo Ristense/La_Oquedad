@@ -26,6 +26,8 @@ public class MisionData : ScriptableObject
     [TextArea] public string[] frasesAgradecimiento = { "¡Gracias! No sabés lo que nos sirve esto." };
     [Tooltip("Lo que dice al recibir uno que no es el último. Al final se le agrega lo que todavía falta.")]
     [TextArea] public string[] frasesEntregaParcial = { "¡Bien, uno menos!" };
+    [Tooltip("Lo que dice cuando le mostrás lo que pidió y decidís quedártelo.")]
+    [TextArea] public string[] frasesRechazo = { "¿En serio? Lo tenés en la mano... Está bien, ya veremos cómo nos arreglamos." };
 
     [Header("Cofre")]
     [Tooltip("Prefab del cofre. Si trae hijos llamados \"PuntoMision\", el objeto pedido aparece ahí; si no, encima del cofre. Sus PuntoSpawnItem se usan para extras opcionales.")]
