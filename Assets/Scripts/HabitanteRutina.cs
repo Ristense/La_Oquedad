@@ -170,8 +170,16 @@ public class HabitanteRutina : MonoBehaviour
         macroVivienda = macro;
 
         alturaBase = 0f;
+        // Modelo con esqueleto (Animator humanoide, tipo Y Bot): los pies están en el pivote del
+        // modelo. Los bounds de un SkinnedMeshRenderer al spawnear vienen del import y no de la pose
+        // real, así que medir con ellos lo enterraba hasta las canillas.
+        Animator animModelo = GetComponentInChildren<Animator>(true);
         Renderer[] rends = GetComponentsInChildren<Renderer>(true);
-        if (rends.Length > 0)
+        if (animModelo != null && animModelo.isHuman)
+        {
+            alturaBase = transform.position.y - animModelo.transform.position.y;
+        }
+        else if (rends.Length > 0)
         {
             Bounds b = rends[0].bounds;
             for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
@@ -802,6 +810,8 @@ public class HabitanteRutina : MonoBehaviour
             desfase -= ahora - relojAnterior;
             relojAnterior = ahora;
             ActualizarAtencion();
+            Caminando = false; // mientras te atiende está parado
+            AplicarAnimator();
             return;
         }
         relojAnterior = ahora;
@@ -842,6 +852,32 @@ public class HabitanteRutina : MonoBehaviour
                 : Quaternion.Slerp(transform.rotation, objetivo, Time.deltaTime * velocidadGiro);
         }
         primerFrame = false;
+        AplicarAnimator();
+    }
+
+    // ---- Animator (opcional) ----
+    // Si el modelo trae un Animator con un parámetro Bool "Caminando", se lo maneja solo. Sin
+    // Animator, o sin ese parámetro, no hace nada (avisa una vez si falta el parámetro).
+    private Animator animator;
+    private bool animatorBuscado, animatorTieneCaminando;
+    private static readonly int ParamCaminando = Animator.StringToHash("Caminando");
+
+    private void AplicarAnimator()
+    {
+        if (!animatorBuscado)
+        {
+            animatorBuscado = true;
+            animator = GetComponentInChildren<Animator>();
+            if (animator != null && animator.runtimeAnimatorController != null)
+            {
+                foreach (AnimatorControllerParameter p in animator.parameters)
+                    if (p.nameHash == ParamCaminando && p.type == AnimatorControllerParameterType.Bool)
+                        animatorTieneCaminando = true;
+                if (!animatorTieneCaminando)
+                    Debug.LogWarning($"[HabitanteRutina] '{name}' tiene Animator pero su controller no tiene un Bool llamado \"Caminando\".");
+            }
+        }
+        if (animatorTieneCaminando) animator.SetBool(ParamCaminando, Caminando);
     }
 
     /// <summary>

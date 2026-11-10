@@ -2325,7 +2325,7 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("A cuántas celdas (máximo) del borde de la vivienda puede aparecer el cofre de una misión. Siempre afuera, en una celda con piso.")]
     [Min(1)]
     public int distanciaMaxCofreMision = 2;
-    [Tooltip("Cuánto se sube el cofre sobre el piso de la celda (m). Para que no quede enterrado en la malla del piso.")]
+    [Tooltip("Solo para cofres SIN malla: cuánto se sube sobre el piso de la celda (m). Los que tienen malla se apoyan solos con la base justo sobre el piso real.")]
     public float alturaCofreMision = 0.5f;
 
     /// <summary>
@@ -2372,11 +2372,13 @@ public class WorldGenerator : MonoBehaviour
         var rng = new System.Random(semilla ^ 0x6C0F);
         celdaCofre = candidatas[rng.Next(candidatas.Count)];
 
-        Vector3 pos = CeldaACentroMundoPiso(celdaCofre) + Vector3.up * alturaCofreMision;
+        Vector3 pos = CeldaACentroMundoPiso(celdaCofre);
         Quaternion rot = Quaternion.Euler(0f, rng.Next(4) * 90f, 0f);
         GameObject cofre = Instantiate(mision.prefabCofre, pos, rot);
         cofre.name = $"Cofre misión '{mision.titulo}' · {celdaCofre}";
         Congelar(cofre);
+        ApoyarEnPiso(cofre, pos);
+        pos = cofre.transform.position;
 
         // Objetos pedidos (todos, uno por unidad): en los hijos "PuntoMision" si los hay; si no, en
         // los PuntoSpawnItem del cofre (elegidos al azar, y esos ya no sacan extras); solo sin
@@ -2437,6 +2439,39 @@ public class WorldGenerator : MonoBehaviour
         }
 
         return cofre;
+    }
+
+    /// <summary>
+    /// Apoya un objeto recién instanciado sobre el piso REAL: busca la superficie con un rayo hacia
+    /// abajo desde el centro de la celda (si la malla del piso todavía no está prendida, usa el piso
+    /// de la grilla) y lo sube o baja hasta que la parte de abajo de sus renderers toque ese punto,
+    /// más `alturaCofreMision`. Así da igual dónde tenga el pivote el prefab.
+    /// </summary>
+    private void ApoyarEnPiso(GameObject go, Vector3 pisoCelda)
+    {
+        // La superficie más alta que haya bajo el centro de la celda (sin contar al objeto mismo).
+        bool hayPiso = false;
+        float pisoY = pisoCelda.y;
+        Vector3 origenRayo = pisoCelda + Vector3.up * 4f;
+        foreach (RaycastHit h in Physics.RaycastAll(origenRayo, Vector3.down, 8f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (h.transform.IsChildOf(go.transform)) continue;
+            if (!hayPiso || h.point.y > pisoY) { pisoY = h.point.y; hayPiso = true; }
+        }
+
+        Renderer[] rends = go.GetComponentsInChildren<Renderer>();
+        if (rends.Length == 0)
+        {
+            // Sin malla no hay de dónde medir la base: se usa el alto fijo de siempre.
+            go.transform.position += Vector3.up * (pisoY - pisoCelda.y + alturaCofreMision);
+            return;
+        }
+
+        Bounds b = rends[0].bounds;
+        for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+        go.transform.position += Vector3.up * (pisoY + 0.01f - b.min.y); // base justo sobre el piso
+        if (logPozoParedes)
+            Debug.Log($"[Misiones] '{go.name}' apoyado en y={pisoY:0.00} ({(hayPiso ? "piso real" : "piso de la grilla, sin collider abajo")}).");
     }
 
     /// <summary>
@@ -3214,7 +3249,55 @@ public class WorldGenerator : MonoBehaviour
         int[] orden = OrdenZonasSecciones(mx, my, mz);
         GameObject prefabSeccion = secciones[orden[IndiceZona(lx, lz)]];
 
-        InstanciarSeccion(prefabSeccion, celda, origin, x, y, z, RotacionSeccionEsquina(x, y, z, lx, lz));
+        Quaternion rot = prefabSeccion != null && MascaraParedesDePrefab(prefabSeccion) != 0
+            ? RotacionSeccionSegunParedes(prefabSeccion, x, y, z, lx, lz)
+            : RotacionSeccionEsquina(x, y, z, lx, lz);
+        InstanciarSeccion(prefabSeccion, celda, origin, x, y, z, rot);
+    }
+
+    /// <summary>
+    /// Giro de una sección que declara sus lados CERRADOS con marcadores ParedPozo (los mismos del
+    /// pozo). Los lados sin marcador son por donde se entra: se prueba de a 90° y gana el giro en el
+    /// que ninguna entrada queda contra algo sólido. Desempates, en orden: más espalda contra pared
+    /// real, una entrada mirando hacia el centro de la sala, y el hash de la celda (variedad estable).
+    /// Si ningún giro deja todas las entradas libres, se queda con el que bloquea menos.
+    /// </summary>
+    private Quaternion RotacionSeccionSegunParedes(GameObject prefab, int x, int y, int z, int lx, int lz)
+    {
+        int cerrados = MascaraParedesDePrefab(prefab);
+
+        int libres = 0; // bits (orden DireccionesPozo) donde el vecino está hueco
+        for (int d = 0; d < 4; d++)
+        {
+            Vector3Int v = DireccionesPozo[d];
+            if (IsCellEmpty(x + v.x, y, z + v.z)) libres |= 1 << d;
+        }
+
+        int haciaCentro = 0;
+        int c = macroSize / 2;
+        if (lz < c) haciaCentro |= 1 << 0; else if (lz > c) haciaCentro |= 1 << 2; // +Z / -Z
+        if (lx < c) haciaCentro |= 1 << 1; else if (lx > c) haciaCentro |= 1 << 3; // +X / -X
+
+        int hash = semillaDelMundo + x * 39119 + y * 51749 + z * 64007;
+        int mejorK = 0, mejorPuntaje = int.MinValue;
+        for (int k = 0; k < 4; k++)
+        {
+            int girado = ((cerrados << k) | (cerrados >> (4 - k))) & 0b1111;
+            int entradas = ~girado & 0b1111;
+
+            int bloqueadas = ContarParedes(entradas & ~libres);
+            int espalda = ContarParedes(girado & ~libres);
+            int alCentro = (entradas & haciaCentro) != 0 ? 1 : 0;
+            int azar = ((hash >> (k * 3)) & 0b111);
+
+            int puntaje = -1000 * bloqueadas + 100 * espalda + 10 * alCentro + azar;
+            if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejorK = k; }
+        }
+
+        if (logPozoParedes)
+            Debug.Log($"[Sección] '{prefab.name}' en ({x},{y},{z}) · cerrados {NombresLados(cerrados)} · vecinos libres {NombresLados(libres)} · giro {mejorK * 90}°");
+
+        return Quaternion.Euler(0f, mejorK * 90f, 0f);
     }
 
     /// <summary>
