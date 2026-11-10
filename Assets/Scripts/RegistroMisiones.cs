@@ -24,6 +24,51 @@ public static class RegistroMisiones
         public Vector3Int celdaCofre;
         public GameObject cofre;
         public Estado estado;
+        /// <summary>Cuántos se entregaron de cada objeto pedido (por su ItemData).</summary>
+        public readonly Dictionary<ItemData, int> entregados = new Dictionary<ItemData, int>();
+
+        /// <summary>Cuántos faltan de este objeto (0 si no lo pide o ya está completo).</summary>
+        public int Faltan(ItemData item)
+        {
+            int pedidos = 0;
+            foreach (MisionData.ObjetoPedido p in data.Pedidos())
+                if (MisionData.DataDe(p.prefab) == item) pedidos += p.cantidad;
+            entregados.TryGetValue(item, out int dados);
+            return Mathf.Max(0, pedidos - dados);
+        }
+
+        /// <summary>¿Ya se entregó todo lo pedido?</summary>
+        public bool TodoEntregado()
+        {
+            foreach (MisionData.ObjetoPedido p in data.Pedidos())
+                if (Faltan(MisionData.DataDe(p.prefab)) > 0) return false;
+            return true;
+        }
+
+        /// <summary>"1 Agua, 2 Comida": lo que todavía falta, para el diálogo.</summary>
+        public string DescribirFaltantes()
+        {
+            var partes = new List<string>();
+            var vistos = new HashSet<ItemData>();
+            foreach (MisionData.ObjetoPedido p in data.Pedidos())
+            {
+                ItemData d = MisionData.DataDe(p.prefab);
+                if (d == null || !vistos.Add(d)) continue;
+                int f = Faltan(d);
+                if (f > 0) partes.Add($"{f} {d.nombreArticulo}");
+            }
+            return string.Join(", ", partes);
+        }
+    }
+
+    /// <summary>Suma una entrega de este objeto. Devuelve false si la misión no lo pide o ya está completo.</summary>
+    public static bool RegistrarEntrega(Mision m, ItemData item)
+    {
+        if (m == null || item == null || m.estado != Estado.Aceptada || m.Faltan(item) <= 0) return false;
+        m.entregados.TryGetValue(item, out int dados);
+        m.entregados[item] = dados + 1;
+        OnCambio?.Invoke();
+        return true;
     }
 
     private static readonly List<Mision> misiones = new List<Mision>();

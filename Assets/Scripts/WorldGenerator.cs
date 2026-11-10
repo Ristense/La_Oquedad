@@ -2325,6 +2325,8 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("A cuántas celdas (máximo) del borde de la vivienda puede aparecer el cofre de una misión. Siempre afuera, en una celda con piso.")]
     [Min(1)]
     public int distanciaMaxCofreMision = 2;
+    [Tooltip("Cuánto se sube el cofre sobre el piso de la celda (m). Para que no quede enterrado en la malla del piso.")]
+    public float alturaCofreMision = 0.5f;
 
     /// <summary>
     /// Pone el cofre de una misión en un pasillo cerca de la vivienda: una celda vacía con piso,
@@ -2370,13 +2372,19 @@ public class WorldGenerator : MonoBehaviour
         var rng = new System.Random(semilla ^ 0x6C0F);
         celdaCofre = candidatas[rng.Next(candidatas.Count)];
 
-        Vector3 pos = CeldaACentroMundoPiso(celdaCofre);
+        Vector3 pos = CeldaACentroMundoPiso(celdaCofre) + Vector3.up * alturaCofreMision;
         Quaternion rot = Quaternion.Euler(0f, rng.Next(4) * 90f, 0f);
         GameObject cofre = Instantiate(mision.prefabCofre, pos, rot);
         cofre.name = $"Cofre misión '{mision.titulo}' · {celdaCofre}";
+        Congelar(cofre);
 
-        // Objeto pedido: en los hijos "PuntoMision" si los hay; si no, en los PuntoSpawnItem del
-        // cofre (elegidos al azar, y esos ya no sacan extras); solo sin ningún punto va encima.
+        // Objetos pedidos (todos, uno por unidad): en los hijos "PuntoMision" si los hay; si no, en
+        // los PuntoSpawnItem del cofre (elegidos al azar, y esos ya no sacan extras); solo sin
+        // ningún punto van encima. Si hay más objetos que puntos, se apilan sobre los mismos.
+        var aSpawnear = new List<GameObject>();
+        foreach (MisionData.ObjetoPedido pedido in mision.Pedidos())
+            for (int k = 0; k < pedido.cantidad; k++) aSpawnear.Add(pedido.prefab);
+
         var puntos = new List<Transform>();
         foreach (Transform t in cofre.GetComponentsInChildren<Transform>(true))
             if (t.name.StartsWith("PuntoMision")) puntos.Add(t);
@@ -2390,7 +2398,7 @@ public class WorldGenerator : MonoBehaviour
                 int j = rng.Next(i + 1);
                 (puntosSpawn[i], puntosSpawn[j]) = (puntosSpawn[j], puntosSpawn[i]);
             }
-            int n = Mathf.Min(mision.cantidadPedida, puntosSpawn.Count);
+            int n = Mathf.Min(aSpawnear.Count, puntosSpawn.Count);
             for (int i = 0; i < n; i++)
             {
                 puntos.Add(puntosSpawn[i].transform);
@@ -2401,14 +2409,15 @@ public class WorldGenerator : MonoBehaviour
         Bounds limites = new Bounds(pos, Vector3.zero);
         foreach (Renderer r in cofre.GetComponentsInChildren<Renderer>()) limites.Encapsulate(r.bounds);
 
-        for (int i = 0; i < mision.cantidadPedida; i++)
+        for (int i = 0; i < aSpawnear.Count; i++)
         {
             Vector3 p = puntos.Count > 0
                 ? puntos[i % puntos.Count].position + Vector3.up * 0.3f * (i / puntos.Count)
                 : new Vector3(pos.x, limites.max.y + 0.2f + i * 0.3f, pos.z);
             Quaternion r = puntos.Count > 0 ? puntos[i % puntos.Count].rotation : rot;
-            GameObject obj = Instantiate(mision.objetoPedido, p, r, cofre.transform);
-            obj.name = $"{mision.objetoPedido.name} (misión)";
+            GameObject obj = Instantiate(aSpawnear[i], p, r, cofre.transform);
+            obj.name = $"{aSpawnear[i].name} (misión)";
+            Congelar(obj);
         }
 
         // Extras: los PuntoSpawnItem que no usó el pedido, con su propio Random (no toca la semilla global).
@@ -2423,11 +2432,27 @@ public class WorldGenerator : MonoBehaviour
                     if (item.prefab != null && rng.NextDouble() <= item.probabilidad) { elegido = item.prefab; break; }
 
             if (elegido != null)
-                Instantiate(elegido, punto.transform.position, punto.transform.rotation, cofre.transform);
+                Congelar(Instantiate(elegido, punto.transform.position, punto.transform.rotation, cofre.transform));
             punto.gameObject.SetActive(false);
         }
 
         return cofre;
+    }
+
+    /// <summary>
+    /// Deja quietos todos los Rigidbody de un objeto (kinematic). El cofre y lo que trae aparecen
+    /// encimados — los items DENTRO de los colliders del cofre — y con física activa se empujan y
+    /// salen disparados. La mano los vuelve dinámicos al soltarlos, como a cualquier item.
+    /// </summary>
+    private static void Congelar(GameObject go)
+    {
+        if (go == null) return;
+        foreach (Rigidbody rb in go.GetComponentsInChildren<Rigidbody>(true))
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = true;
+        }
     }
 
     // ---------- Puntos de andamio de la comunidad (por ahora solo para verlos) ----------

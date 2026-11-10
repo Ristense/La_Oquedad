@@ -475,14 +475,14 @@ public class HabitanteRutina : MonoBehaviour
 
         float total = 0f;
         foreach (MisionData m in misionesDisponibles)
-            if (m != null && m.prefabCofre != null && m.objetoPedido != null) total += m.pesoAparicion;
+            if (m != null && m.prefabCofre != null && m.Pedidos().Count > 0) total += m.pesoAparicion;
         if (total <= 0f) return null;
 
         double tirada = rng.NextDouble() * total;
         MisionData ultima = null;
         foreach (MisionData m in misionesDisponibles)
         {
-            if (m == null || m.prefabCofre == null || m.objetoPedido == null) continue;
+            if (m == null || m.prefabCofre == null || m.Pedidos().Count == 0) continue;
             ultima = m;
             tirada -= m.pesoAparicion;
             if (tirada <= 0) return m;
@@ -516,7 +516,7 @@ public class HabitanteRutina : MonoBehaviour
         if (m != null)
         {
             if (m.estado != RegistroMisiones.Estado.Aceptada) return false;
-            MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesEnCurso, hash)}");
+            MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesEnCurso, hash)} Me falta: {m.DescribirFaltantes()}.");
             return true;
         }
 
@@ -529,13 +529,9 @@ public class HabitanteRutina : MonoBehaviour
         return true;
     }
 
-    /// <summary>ItemData del objeto que pide la misión (sale del InventoryItem de su prefab).</summary>
-    private ItemData DataPedida =>
-        Mision != null && Mision.objetoPedido != null && Mision.objetoPedido.TryGetComponent(out InventoryItem inv) ? inv.data : null;
-
     /// <summary>
-    /// Si tenés en la mano el objeto que pide su misión en curso, devuelve el item (para el prompt
-    /// "[E] Entregar" y para entregarlo). Null si no.
+    /// Si tenés en la mano un objeto que su misión en curso todavía necesita, devuelve el item (para
+    /// el prompt "[E] Entregar" y para entregarlo). Null si no.
     /// </summary>
     private InventoryItem ObjetoDeMisionEnMano(out RegistroMisiones.Mision mision)
     {
@@ -547,25 +543,36 @@ public class HabitanteRutina : MonoBehaviour
 
         ManoJugador mano = FindAnyObjectByType<ManoJugador>();
         InventoryItem item = mano != null ? mano.ItemEnMano : null;
-        if (item == null || item.data == null || item.data != DataPedida) return null;
+        if (item == null || item.data == null || m.Faltan(item.data) <= 0) return null;
 
         mision = m;
         return item;
     }
 
     /// <summary>
-    /// Entregar = mirarlo con el objeto pedido en la mano y apretar [E]: se lo queda, misión
-    /// completada como entregada (+karma).
+    /// Entregar = mirarlo con un objeto pedido en la mano y apretar [E]: se lo queda (uno por vez).
+    /// Si era el último que faltaba, la misión se completa como entregada (+karma); si no, te dice
+    /// lo que todavía falta.
     /// </summary>
     private bool IntentarEntregarDeMano()
     {
         InventoryItem item = ObjetoDeMisionEnMano(out RegistroMisiones.Mision m);
-        if (item == null) return false;
+        if (item == null || !RegistroMisiones.RegistrarEntrega(m, item.data)) return false;
 
         Destroy(item.gameObject);
-        RegistroMisiones.Completar(m, true);
-        ActualizarIndicadorMision();
-        MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesAgradecimiento, semillaPersona ^ 0x7A1)}");
+        int hash = semillaPersona ^ 0x7A1;
+
+        if (m.TodoEntregado())
+        {
+            RegistroMisiones.Completar(m, true);
+            ActualizarIndicadorMision();
+            MostrarDialogo($"[{NombreRol()}] {HabitanteData.ElegirFrase(Mision.frasesAgradecimiento, hash)}");
+        }
+        else
+        {
+            string frase = HabitanteData.ElegirFrase(Mision.frasesEntregaParcial, hash);
+            MostrarDialogo($"[{NombreRol()}] {frase} Todavía me falta: {m.DescribirFaltantes()}.");
+        }
         return true;
     }
 

@@ -15,10 +15,17 @@ MonoBehaviour:
   titulo: Tanta comida?
   pesoAparicion: 1
   frasesPedido:
-  - Necesito que me traigas algo del pasillo de afuera. Vi un cofre por ahi afuera pero tenia una emergencia XD
+  - Necesito que me traigas comida del pasillo de afuera. Vi un cofre por ahi afuera pero tenia una emergencia.
   frasesEnCurso:
   - "\xBFTodav\xEDa nada? Est\xE1 cerca, en el pasillo de afuera."
+  frasesAgradecimiento:
+  - "\xA1Gracias! No sab\xE9s lo que nos sirve esto."
+  frasesEntregaParcial:
+  - "\xA1Bien, uno menos!"
   prefabCofre: {fileID: 2811944303938828514, guid: d19af6eec749b0c408dd60345675ac4e, type: 3}
+  objetosPedidos:
+  - prefab: {fileID: 5219307798337005664, guid: abeeae249e3c1d54798cb28e294bf940, type: 3}
+    cantidad: 2
   objetoPedido: {fileID: 5219307798337005664, guid: abeeae249e3c1d54798cb28e294bf940, type: 3}
   cantidadPedida: 1
   karmaEntregar: 1
