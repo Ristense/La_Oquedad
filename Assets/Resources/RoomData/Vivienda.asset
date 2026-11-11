@@ -31,6 +31,8 @@ MonoBehaviour:
   seccionAlmacenamiento: {fileID: 0}
   seccionesRelleno:
   - {fileID: 347993161651748056, guid: 62e67c1dbadef1b45824c27888feb10b, type: 3}
+  prefabsCasaColgante:
+  - {fileID: 6087184780359261193, guid: 2cf48df3ea3293a46aff9c2d64a05fc1, type: 3}
   generarLuces: 1
   prefabsLuces:
   - {fileID: 2366967968262966954, guid: 411173357bc5e884c91199356ecbeed0, type: 3}

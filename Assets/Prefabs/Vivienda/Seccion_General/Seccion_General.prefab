@@ -48,7 +48,7 @@ MonoBehaviour:
   alturaExtra: 0.59
   log: 0
   prefabsFarol:
-  - {fileID: 4364249107600818391, guid: 37aba1adc6a6f1648a5b5ca692274fdc, type: 3}
+  - {fileID: 3628842263099664207, guid: 37aba1adc6a6f1648a5b5ca692274fdc, type: 3}
   probabilidadFarolCentro: 0.5
   farolesEsquina: {x: 2, y: 4}
   margenFarol: 1.5

@@ -10,11 +10,6 @@ using UnityEngine;
 /// </summary>
 public class DebugAndamiosComunidad : MonoBehaviour
 {
-    private static readonly Color[] ColoresPorPiso =
-    {
-        Color.white, Color.white, new Color(1f, 0.85f, 0.1f), new Color(0.2f, 1f, 0.4f), new Color(1f, 0.3f, 0.9f)
-    };
-
     private static readonly Color ColorPasillo = new Color(0.2f, 0.85f, 1f);
     private static readonly Color ColorEscalera = new Color(1f, 0.5f, 0.1f);
 
@@ -38,17 +33,8 @@ public class DebugAndamiosComunidad : MonoBehaviour
         macroDibujado = macro;
         hayDibujo = true;
 
+        // Los puntos ya no se dibujan: ahí van las casas colgantes (RoomData.prefabsCasaColgante).
         List<WorldGenerator.PuntoAndamio> puntos = wg.PuntosAndamioComunidad(macro);
-        foreach (WorldGenerator.PuntoAndamio p in puntos)
-        {
-            int ly = ((p.celda.y % wg.macroSize) + wg.macroSize) % wg.macroSize;
-            Color color = ColoresPorPiso[Mathf.Clamp(ly, 0, ColoresPorPiso.Length - 1)];
-
-            Vector3 pos = p.posicion + p.normal * 1.5f + Vector3.up * 1f;
-            Crear(PrimitiveType.Sphere, pos, Vector3.one * 3f, Quaternion.identity, color, $"Andamio piso {ly} · {p.celda}");
-            Crear(PrimitiveType.Cube, pos + p.normal * 3f, new Vector3(0.4f, 0.4f, 6f),
-                  Quaternion.LookRotation(p.normal, Vector3.up), color, "normal");
-        }
         int tramos = 0, escaleras = 0;
         if (wg.dibujarCaminosAndamio)
         {

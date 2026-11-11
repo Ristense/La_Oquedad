@@ -461,8 +461,8 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("Cuántos pilares por comunidad (mín/máx). Van en vértices interiores de la planta, nunca en el borde ni dos pegados.")]
     public Vector2Int pilaresPorComunidad = new Vector2Int(1, 2);
 
-    [Header("Andamios de la Comunidad (debug)")]
-    [Tooltip("Dibuja en el Game esferas en los puntos donde irían plataformas de andamio, solo en la comunidad donde estás.")]
+    [Header("Andamios y Casas Colgantes de la Comunidad")]
+    [Tooltip("Debug: dibuja en el Game los puentes y bajadas entre casas colgantes (dibujarCaminosAndamio), solo en la comunidad donde estás. Apagado = no dibuja nada. Las casas salen igual.")]
     public bool dibujarPuntosAndamio = true;
     [Tooltip("Cuántos puntos por piso de la grilla (mín/máx), desde el segundo piso para arriba.")]
     public Vector2Int puntosAndamioPorPiso = new Vector2Int(1, 3);
@@ -2321,6 +2321,67 @@ public class WorldGenerator : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Una casa colgante (RoomData.prefabsCasaColgante) en cada punto de andamio de la comunidad,
+    /// elegida por hash del punto. Se para en el punto de la pared, a la altura del piso de su celda.
+    /// Con marcadores ParedPozo se gira para que un lado marcado quede contra la pared; sin marcadores
+    /// su -Z va contra la pared (sale hacia la sala por +Z). Se registra en la celda central, como los
+    /// pilares: la prende la burbuja junto con el resto de la comunidad.
+    /// </summary>
+    private void InstanciarCasasColgantesComunidad(Vector3Int celdaCentral, Vector3Int macro)
+    {
+        RoomData sala = ObtenerRoomDataParaMacro(macro.x, macro.y, macro.z);
+        if (sala == null || sala.prefabsCasaColgante == null || sala.prefabsCasaColgante.Length == 0) return;
+
+        foreach (PuntoAndamio p in PuntosAndamioComunidad(macro))
+        {
+            uint hash = (uint)(semillaDelMundo + p.celda.x * 91813 + p.celda.y * 43391 + p.celda.z * 27449);
+            hash ^= hash >> 13; hash *= 0x5bd1e995; hash ^= hash >> 15;
+            GameObject prefab = sala.prefabsCasaColgante[(int)(hash % (uint)sala.prefabsCasaColgante.Length)];
+            if (prefab == null) continue;
+
+            // Se instancia derecha en el origen para medir la casa en su propio espacio: el centro y
+            // el tamaño de su malla, y de qué lado del CENTRO están sus ParedPozo. Así da igual dónde
+            // tenga el pivote.
+            GameObject go = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
+            go.name = $"{prefab.name} · casa colgante · {p.celda}";
+
+            Renderer[] rends = go.GetComponentsInChildren<Renderer>();
+            Bounds b = rends.Length > 0 ? rends[0].bounds : new Bounds(Vector3.zero, Vector3.zero);
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
+            // Lado de la pared en espacio de la casa: hacia donde están sus marcadores (promedio)
+            // respecto al centro de la malla. Sin marcadores: -Z.
+            Vector3 ladoPared = Vector3.back;
+            ParedPozo[] marcas = go.GetComponentsInChildren<ParedPozo>(true);
+            if (marcas.Length > 0)
+            {
+                Vector3 prom = Vector3.zero;
+                foreach (ParedPozo m in marcas) prom += m.transform.position;
+                Vector3 rel = prom / marcas.Length - b.center;
+                ladoPared = Mathf.Abs(rel.x) > Mathf.Abs(rel.z)
+                    ? new Vector3(Mathf.Sign(rel.x), 0f, 0f)
+                    : new Vector3(0f, 0f, Mathf.Sign(rel.z));
+            }
+
+            // Ancla = centro de la cara que va contra la pared, a la altura de la base de la malla.
+            float ext = Mathf.Abs(ladoPared.x) > 0f ? b.extents.x : b.extents.z;
+            Vector3 ancla = b.center + ladoPared * ext;
+            ancla.y = b.min.y;
+
+            // Girar para que esa cara mire a la pared, y mover para que el ancla caiga en el punto.
+            Vector3 haciaPared = -p.normal;
+            Quaternion rot = Quaternion.Euler(0f, Vector3.SignedAngle(ladoPared, haciaPared, Vector3.up), 0f);
+            go.transform.SetPositionAndRotation(p.posicion - rot * ancla, rot);
+
+            if (logPozoParedes)
+                Debug.Log($"[Casas] '{prefab.name}' en {p.celda}: {marcas.Length} marcador(es), lado pared local {ladoPared}, tamaño {b.size:F1}.");
+
+            go.SetActive(false);
+            RegistrarEnCelda(celdaCentral, go);
+        }
+    }
+
     // ---------- Cofres de misión ----------
 
     [Header("Misiones de Cofre")]
@@ -3978,6 +4039,7 @@ public class WorldGenerator : MonoBehaviour
         {
             InstanciarHabitantesRutina(celda, new Vector3Int(mx, my, mz));
             InstanciarPilaresComunidad(celda, new Vector3Int(mx, my, mz));
+            InstanciarCasasColgantesComunidad(celda, new Vector3Int(mx, my, mz));
         }
 
         if (EsTipoConRoomData(tipo) && lx == 2 && ly == 1 && lz == 2)

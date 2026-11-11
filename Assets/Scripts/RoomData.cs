@@ -40,6 +40,8 @@ public class RoomData : ScriptableObject
     public GameObject seccionAlmacenamiento;
     [Tooltip("Zona de RELLENO de la comunidad: va en las celdas huecas de la planta baja que quedan libres (el anillo de afuera, sin puertas ni donde arranca una escalera). En cada celda se elige uno de esta lista por semilla. Si el prefab trae marcadores ParedPozo, se gira para dejar esos lados contra la pared; si no, mira hacia el centro. Vacío = esas celdas quedan vacías.")]
     public GameObject[] seccionesRelleno;
+    [Tooltip("Casas colgantes de la comunidad: una en cada punto de andamio (paredes, del segundo piso para arriba), elegida por semilla. El pivote va en el punto de la pared, a la altura del piso. Con marcadores ParedPozo, un lado marcado queda contra la pared; sin marcadores, su -Z va contra la pared y la casa sale hacia la sala por +Z.")]
+    public GameObject[] prefabsCasaColgante;
 
     [Header("Luces de Techo (8 celdas del 3x3, excluye la central)")]
     [Tooltip("Si está activo, esta sala spawnea luces colgando del techo de las 8 celdas no-centrales.")]
