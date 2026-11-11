@@ -4524,6 +4524,14 @@ public class WorldGenerator : MonoBehaviour
             if (!IsCellEmpty(nx, y, nz)) continue;         // hay pared → no es boca
             if (!EsSalaGrandeOAbismo(nx, y, nz)) continue; // el pasillo continúa → no es término
 
+            // Si en esa cara va una puerta de cambio de sección (_cierre), la boca no queda abierta:
+            // el marco quedaría metido adentro de la puerta. La cara X-/Z- es de esta celda; la X+/Z+
+            // es la X-/Z- de la vecina (misma regla que usa IntentarGenerarCierrePasillo).
+            bool hayPuerta = d.x != 0
+                ? TransicionConPuerta(d.x > 0 ? x + 1 : x, y, z, caraX: true)
+                : TransicionConPuerta(x, y, d.z > 0 ? z + 1 : z, caraX: false);
+            if (hayPuerta) continue;
+
             Vector3 dirF = new Vector3(d.x, 0f, d.z);
             Quaternion rot = Quaternion.LookRotation(dirF, Vector3.up);
             // La boca se trata como si hubiera una pared exterior en esa cara: mismo offset de piel.

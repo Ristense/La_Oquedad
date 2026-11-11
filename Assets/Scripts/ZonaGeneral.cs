@@ -19,6 +19,8 @@ public class ZonaGeneral : MonoBehaviour
 
     [Tooltip("Cuánto (m) se sube TODA la zona al generarse: lo que pusiste a mano adentro, las mesas y faroles, y las sillas de los PuntoSpawnItem. Para compensar el grosor del piso. Ajustalo en Play hasta que apoyen bien.")]
     public float alturaExtra = 0f;
+    [Tooltip("Log en consola de cada cosa que pone: dónde quedó y el tamaño de su malla.")]
+    public bool log = true;
 
     [Header("Faroles")]
     public GameObject[] prefabsFarol;
@@ -39,11 +41,14 @@ public class ZonaGeneral : MonoBehaviour
     [Min(0f)] public float desorden = 0.3f;
     [Tooltip("Si está activo, cada mesa puede quedar girada 90° respecto a las otras. Apagado = todas iguales.")]
     public bool girosMezclados = false;
+    [Tooltip("Giro extra al azar de cada mesa, hasta este ángulo (grados) para cada lado. 0 = todas derechas.")]
+    [Range(0f, 45f)] public float giroAlAzar = 20f;
 
     /// <summary>Llena la zona. Lo llama el WorldGenerator con el tamaño de la celda y un hash estable.</summary>
     public void Poblar(float tamanoCelda, int hash)
     {
         var rng = new System.Random(hash);
+        if (log) Debug.Log($"[ZonaGeneral] {name}: poblando · faroles {(prefabsFarol == null ? 0 : prefabsFarol.Length)} · mesas {(prefabsMesa == null ? 0 : prefabsMesa.Length)}", this);
         float mitad = tamanoCelda * 0.5f;
         bool farolEnCentro = false;
 
@@ -99,7 +104,8 @@ public class ZonaGeneral : MonoBehaviour
                 Vector3 p = lugares[i] + new Vector3(
                     (float)(rng.NextDouble() * 2 - 1) * desorden, 0f,
                     (float)(rng.NextDouble() * 2 - 1) * desorden);
-                float yaw = yawBase + (girosMezclados ? rng.Next(2) * 90f : 0f);
+                float yaw = yawBase + (girosMezclados ? rng.Next(2) * 90f : 0f)
+                    + (float)(rng.NextDouble() * 2 - 1) * giroAlAzar;
                 Poner(Elegir(prefabsMesa, rng), p, yaw);
             }
         }
@@ -111,6 +117,19 @@ public class ZonaGeneral : MonoBehaviour
         GameObject go = Instantiate(prefab, transform);
         go.transform.localPosition = local;
         go.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+
+        if (log)
+        {
+            string malla = "sin renderers";
+            Renderer[] rs = go.GetComponentsInChildren<Renderer>(true);
+            if (rs.Length > 0)
+            {
+                Bounds b = rs[0].bounds;
+                for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+                malla = $"malla centro {b.center} tamaño {b.size}";
+            }
+            Debug.Log($"[ZonaGeneral] {name}: puse '{prefab.name}' en local {local} (mundo {go.transform.position}) · {malla}", go);
+        }
     }
 
     private static GameObject Elegir(GameObject[] lista, System.Random rng) => lista[rng.Next(lista.Length)];
