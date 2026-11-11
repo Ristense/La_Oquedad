@@ -1,5 +1,429 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2508444727056137815
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2381646636740292804}
+  - component: {fileID: 4589858309295579447}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (10)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2381646636740292804
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2508444727056137815}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.309, y: 0.1, z: 1.59}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4589858309295579447
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2508444727056137815}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &2660480552428292222
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1652829442281764222}
+  - component: {fileID: 2194714739706235877}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (7)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1652829442281764222
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2660480552428292222}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1.3032265, y: 0.1, z: -0.34879684}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2194714739706235877
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2660480552428292222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &2720702627758840396
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3425344919108005969}
+  - component: {fileID: 7669942435939954938}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (9)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3425344919108005969
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2720702627758840396}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.465, y: 0.1, z: -1.411}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7669942435939954938
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2720702627758840396}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &4156434188636988555
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5657348119077657271}
+  - component: {fileID: 4416969128584120923}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (5)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5657348119077657271
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4156434188636988555}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1.3032265, y: 0.1, z: 0.7412033}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4416969128584120923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4156434188636988555}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &4657179950439538048
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1978927066297933530}
+  - component: {fileID: 6518931925054200287}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (11)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1978927066297933530
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4657179950439538048}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.465, y: 0.1, z: 1.5899994}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6518931925054200287
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4657179950439538048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &6823787235471108022
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4993740550962714975}
+  - component: {fileID: 8201556694099682759}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (8)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4993740550962714975
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6823787235471108022}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.309, y: 0.1, z: -1.411}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8201556694099682759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6823787235471108022}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &7801755399655343278
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 626493098011512376}
+  - component: {fileID: 436362985771148681}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (6)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &626493098011512376
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7801755399655343278}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1.3600006, y: 0.1, z: -0.34879684}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &436362985771148681
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7801755399655343278}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
+--- !u!1 &8501999632884858925
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2555513708881087685}
+  - component: {fileID: 2901127465593444034}
+  m_Layer: 0
+  m_Name: SpawnPoint_Sillas (4)
+  m_TagString: Untagged
+  m_Icon: {fileID: 7866945982896999795, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2555513708881087685
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8501999632884858925}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1.36, y: 0.1, z: 0.7412033}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1970230246468091519}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2901127465593444034
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8501999632884858925}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4cd9b7cbcd8cfb4d97a6889e37941f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuntoSpawnItem
+  itemsPosibles:
+  - prefab: {fileID: 5455725056849643497, guid: 806e5d20d2902c041bdfcd69b963815e, type: 3}
+    probabilidad: 0.6
+  probabilidadSpawn: 1
+  mirarAlCentro: 1
+  yawBase: 0
+  giroAlAzar: 15
+  grupoExclusivo: 
+  prioridad: 0
 --- !u!1001 &2079836766613313940
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10,15 +434,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.5800018
+      value: 25.677794
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: 7.37
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.60702133
+      value: 33.963757
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
       propertyPath: m_LocalRotation.w
@@ -54,6 +478,35 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2555513708881087685}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5657348119077657271}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 626493098011512376}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4993740550962714975}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2381646636740292804}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3425344919108005969}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1978927066297933530}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1652829442281764222}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+--- !u!4 &1970230246468091519 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: de84ea7fc4927f6408538cd4f2fbfb7d, type: 3}
+  m_PrefabInstance: {fileID: 2079836766613313940}
+  m_PrefabAsset: {fileID: 0}

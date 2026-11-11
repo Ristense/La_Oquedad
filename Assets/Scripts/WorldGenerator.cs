@@ -3148,7 +3148,17 @@ public class WorldGenerator : MonoBehaviour
         punto.gameObject.SetActive(false); // el marcador nunca se ve en juego
         if (elegido == null) return false;
 
-        GameObject go = Instantiate(elegido, punto.transform.position, punto.transform.rotation, transform);
+        Quaternion rotPunto = punto.transform.rotation;
+        if (punto.mirarAlCentro && punto.transform.parent != null)
+        {
+            // Hacia el centro del padre (la mesa), en el plano; después el giro al azar.
+            Vector3 alCentro = punto.transform.parent.position - punto.transform.position;
+            alCentro.y = 0f;
+            float azar = (Random.value * 2f - 1f) * punto.giroAlAzar;
+            if (alCentro.sqrMagnitude > 0.0001f)
+                rotPunto = Quaternion.LookRotation(-alCentro, Vector3.up) * Quaternion.Euler(0f, punto.yawBase + azar, 0f); // -alCentro: los modelos de silla miran por su -Z
+        }
+        GameObject go = Instantiate(elegido, punto.transform.position, rotPunto, transform);
 
         // Debug: el nombre dice de dónde salió. Si algo aparece donde no debe, lo seleccionás en la
         // Hierarchy y ya sabés qué prefab lo trajo y en qué celda, sin adivinar.

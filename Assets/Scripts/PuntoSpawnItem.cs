@@ -26,6 +26,14 @@ public class PuntoSpawnItem : MonoBehaviour
     [Tooltip("Probabilidad de que este punto genere ALGO. Si falla, el punto queda vacío aunque itemsPosibles tenga candidatos.")]
     public float probabilidadSpawn = 1f;
 
+    [Header("Orientación (opcional)")]
+    [Tooltip("El objeto que sale mira hacia el CENTRO del padre de este punto (ej. la silla hacia su mesa), ignorando la rotación del punto. Apagado = usa la rotación del punto, como siempre.")]
+    public bool mirarAlCentro = false;
+    [Tooltip("Solo con Mirar Al Centro. Corrección (grados) si el modelo no mira por su +Z: si quedan de espaldas a la mesa, poné 180.")]
+    public float yawBase = 0f;
+    [Tooltip("Solo con Mirar Al Centro. Giro extra al azar, hasta este ángulo para cada lado, DESPUÉS de apuntar al centro.")]
+    [Range(0f, 45f)] public float giroAlAzar = 15f;
+
     [Header("Grupo Excluyente (opcional)")]
     [Tooltip("Vacío (default) = este punto es TOTALMENTE independiente de los demás.\n\nPodés poner un nombre de grupo (ej: Palet_Izq) o varios separados por comas (ej: Palet_Izq, Palet_Der). En un grupo EXCLUYENTE se evalúan en orden de Prioridad, y en cuanto UNO logra spawnear algo, los demás de ese grupo se apagan directamente sin tirar dados.")]
     public string grupoExclusivo = "";
