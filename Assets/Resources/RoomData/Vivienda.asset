@@ -29,6 +29,8 @@ MonoBehaviour:
   seccionBateria: {fileID: 2937392954690598533, guid: 39dd7ba27c0c2ac4887c65f0b7253e35, type: 3}
   seccionDormir: {fileID: 0}
   seccionAlmacenamiento: {fileID: 0}
+  seccionesRelleno:
+  - {fileID: 347993161651748056, guid: 62e67c1dbadef1b45824c27888feb10b, type: 3}
   generarLuces: 1
   prefabsLuces:
   - {fileID: 2366967968262966954, guid: 411173357bc5e884c91199356ecbeed0, type: 3}

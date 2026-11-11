@@ -604,6 +604,7 @@ public class WorldGenerator : MonoBehaviour
         celdasNoDescargables.Clear();
         cacheTipoChunk.Clear();
         cacheFormaComunidad.Clear();
+        cacheArranquesCaminos.Clear();
         cacheCeldaVacia.Clear();
         cacheDirBalcon.Clear();
         cacheCierre.Clear();
@@ -1099,6 +1100,7 @@ public class WorldGenerator : MonoBehaviour
         celdasNoDescargables.Clear();
         cacheTipoChunk.Clear();
         cacheFormaComunidad.Clear();
+        cacheArranquesCaminos.Clear();
         cacheCeldaVacia.Clear();
         cacheDirBalcon.Clear();
         cacheCierre.Clear();
@@ -3174,9 +3176,9 @@ public class WorldGenerator : MonoBehaviour
     /// acá no se genera nada más. Sin `rotacion` va sin girar (lo que necesita la sección de
     /// almacenamiento de la celda central, que tiene sus 4 lados libres y no hay a cuál apuntar).
     /// </summary>
-    private void InstanciarSeccion(GameObject prefabSeccion, Vector3Int celda, Vector3 origin, int x, int y, int z, Quaternion? rotacion = null)
+    private GameObject InstanciarSeccion(GameObject prefabSeccion, Vector3Int celda, Vector3 origin, int x, int y, int z, Quaternion? rotacion = null)
     {
-        if (prefabSeccion == null) return;
+        if (prefabSeccion == null) return null;
 
         Vector3 pos = origin + new Vector3(
             x * cellSize + (cellSize / 2f),
@@ -3186,6 +3188,7 @@ public class WorldGenerator : MonoBehaviour
         GameObject go = Instantiate(prefabSeccion, pos, rotacion ?? Quaternion.identity, transform);
         go.SetActive(false);
         RegistrarEnCelda(celda, go);
+        return go;
     }
 
     /// <summary>
@@ -3253,6 +3256,79 @@ public class WorldGenerator : MonoBehaviour
             ? RotacionSeccionSegunParedes(prefabSeccion, x, y, z, lx, lz)
             : RotacionSeccionEsquina(x, y, z, lx, lz);
         InstanciarSeccion(prefabSeccion, celda, origin, x, y, z, rot);
+    }
+
+    // Celdas de planta baja donde arranca un camino de andamio (ahí va la escalera): no se rellenan.
+    private readonly Dictionary<Vector3Int, HashSet<Vector3Int>> cacheArranquesCaminos = new Dictionary<Vector3Int, HashSet<Vector3Int>>();
+
+    private HashSet<Vector3Int> ArranquesCaminosComunidad(Vector3Int macro)
+    {
+        if (cacheArranquesCaminos.TryGetValue(macro, out HashSet<Vector3Int> set)) return set;
+        set = new HashSet<Vector3Int>();
+        int pisoY = macro.y * macroSize + 1;
+        foreach (List<Vector3Int> camino in CaminosComunidad(macro))
+            foreach (Vector3Int c in camino)
+                if (c.y == pisoY) set.Add(c);
+        cacheArranquesCaminos[macro] = set;
+        return set;
+    }
+
+    /// <summary>
+    /// Zona de relleno: una celda hueca del anillo de afuera en planta baja que no es puerta ni
+    /// arranque de escalera recibe un prefab de RoomData.seccionesRelleno, elegido por hash de la
+    /// celda. Con marcadores ParedPozo se gira igual que las secciones; sin ellos mira al centro.
+    /// </summary>
+    private void IntentarGenerarRellenoComunidad(int mx, int my, int mz, Vector3Int celda, Vector3 origin, int x, int y, int z, int lx, int lz)
+    {
+        if (!IsCellEmpty(x, y, z)) return;
+
+        int medio = macroSize / 2;
+        bool esPuerta = (lx == medio && (lz == 0 || lz == macroSize - 1)) || (lz == medio && (lx == 0 || lx == macroSize - 1));
+        if (esPuerta) return;
+
+        RoomData sala = ObtenerRoomDataParaMacro(mx, my, mz);
+        if (sala == null || sala.seccionesRelleno == null || sala.seccionesRelleno.Length == 0) return;
+
+        if (ArranquesCaminosComunidad(new Vector3Int(mx, my, mz)).Contains(celda)) return;
+
+        uint hash = (uint)(semillaDelMundo + x * 73471 + y * 19447 + z * 52391);
+        hash ^= hash >> 13; hash *= 0x5bd1e995; hash ^= hash >> 15;
+        GameObject prefab = sala.seccionesRelleno[(int)(hash % (uint)sala.seccionesRelleno.Length)];
+        if (prefab == null) return;
+
+        Quaternion rot;
+        if (MascaraParedesDePrefab(prefab) != 0)
+            rot = RotacionSeccionSegunParedes(prefab, x, y, z, lx, lz);
+        else
+        {
+            Vector3 alCentro = new Vector3(medio - lx, 0f, medio - lz);
+            bool ejeX = Mathf.Abs(alCentro.x) > Mathf.Abs(alCentro.z)
+                || (Mathf.Abs(alCentro.x) == Mathf.Abs(alCentro.z) && (hash & 0x10000) != 0);
+            Vector3 mirar = ejeX ? new Vector3(Mathf.Sign(alCentro.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(alCentro.z));
+            rot = Quaternion.LookRotation(mirar, Vector3.up) * Quaternion.Euler(0f, yawBaseSeccion, 0f);
+        }
+        GameObject go = InstanciarSeccion(prefab, celda, origin, x, y, z, rot);
+        if (go == null) return;
+
+        // Zona general: faroles y mesas ordenados por semilla; después, las sillas (PuntoSpawnItem) de las mesas.
+        ZonaGeneral zona = go.GetComponent<ZonaGeneral>();
+        if (zona != null) zona.Poblar(cellSize, (int)(hash ^ 0x3C6EF372u));
+
+        Random.State prev = Random.state;
+        Random.InitState((int)(hash * 2654435761u));
+        int antes = mundoChunks[celda].Count;
+        ProcesarPuntosSpawnItem(go, celda);
+        Random.state = prev;
+
+        // Altura extra de la zona: a la sección entera y a lo que salió de sus PuntoSpawnItem (sillas,
+        // etc.), que el generador cuelga aparte y no se mueve junto con ella.
+        if (zona != null && zona.alturaExtra != 0f)
+        {
+            Vector3 subir = Vector3.up * zona.alturaExtra;
+            go.transform.position += subir;
+            for (int i = antes; i < mundoChunks[celda].Count; i++)
+                if (mundoChunks[celda][i] != null) mundoChunks[celda][i].transform.position += subir;
+        }
     }
 
     /// <summary>
@@ -4023,6 +4099,12 @@ public class WorldGenerator : MonoBehaviour
         if (EsTipoConRoomData(tipo) && ly == 1 && (lx == 1 || lx == 3) && (lz == 1 || lz == 3))
         {
             IntentarGenerarSeccionVivienda(mx, my, mz, celda, origin, x, y, z, lx, lz);
+        }
+
+        // Relleno de la comunidad: las celdas huecas del anillo de afuera en planta baja.
+        if (EsTipoComunidad(tipo) && ly == 1 && (lx == 0 || lx == macroSize - 1 || lz == 0 || lz == macroSize - 1))
+        {
+            IntentarGenerarRellenoComunidad(mx, my, mz, celda, origin, x, y, z, lx, lz);
         }
 
         // Luces de Sala: para cualquier celda del 3x3 del piso de la Sala Grande, EXCEPTO la central.
