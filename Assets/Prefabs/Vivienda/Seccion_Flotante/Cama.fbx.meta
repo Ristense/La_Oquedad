@@ -1,9 +1,24 @@
 fileFormatVersion: 2
-guid: 98729bfc0873c6740b425c5b0ca9ca5c
+guid: d821ec00bd238c341bb69e4524b34ce8
 ModelImporter:
   serializedVersion: 24600
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MayaMetalica
+    second: {fileID: 2100000, guid: 8a2ec05ff940f4747981c5e4c1738902, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Placas_Oxidadas
+    second: {fileID: 2100000, guid: ba548a18b2a09a9478d2e71c74d35319, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_PocoOxidado
+    second: {fileID: 2100000, guid: 8250a224427616243bdfab5074583b6c, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
