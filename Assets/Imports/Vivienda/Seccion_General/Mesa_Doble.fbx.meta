@@ -3,7 +3,12 @@ guid: de84ea7fc4927f6408538cd4f2fbfb7d
 ModelImporter:
   serializedVersion: 24600
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Placas_Oxidadas
+    second: {fileID: 2100000, guid: 20035eefcfcd58f43bed7cba998b7df0, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

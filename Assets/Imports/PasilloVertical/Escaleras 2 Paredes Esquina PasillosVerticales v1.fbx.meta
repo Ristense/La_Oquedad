@@ -3,7 +3,27 @@ guid: d7d2956bbcdfc8844a803853ee74d1c0
 ModelImporter:
   serializedVersion: 24600
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ConcretoBase
+    second: {fileID: 2100000, guid: dfc462f3c87d7184fb709ca2c3b5b571, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MayaMetalica
+    second: {fileID: 2100000, guid: 3852c767db2fe6c4a99bbd456d6c4098, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Negro
+    second: {fileID: 2100000, guid: cb1bcd4e2c46d4f4387159628fad6861, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_PocoOxidado
+    second: {fileID: 2100000, guid: e678a94629c2961489c65aaa384eb936, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

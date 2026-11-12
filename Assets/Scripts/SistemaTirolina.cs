@@ -139,11 +139,10 @@ public class SistemaTirolina : MonoBehaviour
     public float pasoTiempoArco = 0.05f;
 
     // --- Estado interno ---
-    // Fallar (el proyectil no se clava en nada) NO gasta el cargador — el dardo va atado a la
-    // misma cuerda, así que un tiro perdido se "recupera" y puedes reintentar. Solo si fallas DOS
-    // veces seguidas sin haber clavado nada en el medio, el cargador queda vacío y hay que recargar.
-    // Cualquier anclaje exitoso resetea la racha de fallos a cero.
-    private int fallosConsecutivos = 0;
+    // Cada disparo gasta una bala, acierte o falle: el cargador tiene disparosPorCargador (2 = una
+    // tirolina) y se vuelve a llenar solo con la recarga (R). Los iconos de munición se apagan uno
+    // por disparo.
+    private int disparosGastados = 0;
     private bool destinoAnclado = false;
     private Vector3 anclaDestino;
     private bool proyectilEnVuelo = false;
@@ -181,7 +180,7 @@ public class SistemaTirolina : MonoBehaviour
             fuenteSonido.playOnAwake = false;
         }
 
-        fallosConsecutivos = 0;
+        disparosGastados = 0;
         SetActivoUiMunicion(false);
         if (lineaPreview != null) lineaPreview.enabled = false;
         if (textoDistancia != null) textoDistancia.gameObject.SetActive(false);
@@ -215,10 +214,10 @@ public class SistemaTirolina : MonoBehaviour
             return;
         }
 
-        // Recarga: limpia la racha de fallos y cancela cualquier anclaje a medio hacer.
-        if (Input.GetKeyDown(teclaRecarga) && (fallosConsecutivos > 0 || destinoAnclado))
+        // Recarga: llena el cargador y cancela cualquier anclaje a medio hacer.
+        if (Input.GetKeyDown(teclaRecarga) && (disparosGastados > 0 || destinoAnclado))
         {
-            fallosConsecutivos = 0;
+            disparosGastados = 0;
             destinoAnclado = false;
             ActualizarMunicionUI();
             Sonar(sonidoRecarga);
@@ -245,7 +244,7 @@ public class SistemaTirolina : MonoBehaviour
         {
             ActualizarPreview();
 
-            if (Input.GetMouseButtonDown(0) && fallosConsecutivos < disparosPorCargador && !proyectilEnVuelo)
+            if (Input.GetMouseButtonDown(0) && disparosGastados < disparosPorCargador && !proyectilEnVuelo)
                 Disparar();
         }
         else
@@ -377,6 +376,8 @@ public class SistemaTirolina : MonoBehaviour
         }
 
         proyectilEnVuelo = true;
+        disparosGastados++;      // la bala se gasta al disparar, acierte o falle
+        ActualizarMunicionUI();  // se apaga su rayita en el acto
 
         // Va acá y no antes: si faltaba el prefab o la batería, la función ya salió por un return
         // y no tiene que sonar un disparo que nunca ocurrió.
@@ -394,8 +395,6 @@ public class SistemaTirolina : MonoBehaviour
     private void OnProyectilImpacto(Vector3 punto)
     {
         proyectilEnVuelo = false;
-        fallosConsecutivos = 0; // anclaje exitoso: se recupera toda la racha de fallos
-        ActualizarMunicionUI();
 
         SonarEnPunto(sonidoImpacto, punto);
 
@@ -429,12 +428,9 @@ public class SistemaTirolina : MonoBehaviour
 
     private void OnProyectilFallo()
     {
-        // El proyectil se autodestruyó sin pegarle a nada (voló al vacío). Como va atado a la misma
-        // cuerda, un tiro perdido se "recupera" — no cuenta como gastado salvo que sea el 2do fallo
-        // seguido, ahí sí se vacía el cargador y hay que recargar con R.
+        // El proyectil se autodestruyó sin pegarle a nada (voló al vacío). La bala ya se descontó al
+        // disparar: un tiro perdido es una bala perdida.
         proyectilEnVuelo = false;
-        fallosConsecutivos++;
-        ActualizarMunicionUI();
 
         Sonar(sonidoFallo);
     }
@@ -637,20 +633,18 @@ public class SistemaTirolina : MonoBehaviour
 
     private void ActualizarMunicionUI()
     {
-        // Lo que de verdad se gasta es el MARGEN DE FALLO: clavar el dardo recupera la racha entera
-        // (ver OnProyectilImpacto), así que este número sube solo cuando el tiro se pierde.
-        int gastados = Mathf.Clamp(fallosConsecutivos, 0, disparosPorCargador);
+        // Una bala por disparo (acierte o falle); se recuperan todas con la recarga.
+        int gastados = Mathf.Clamp(disparosGastados, 0, disparosPorCargador);
 
         if (sliderMunicion != null)
         {
             sliderMunicion.maxValue = disparosPorCargador;
-            // Muestra cuánto margen de fallo te queda (lleno = sin fallos acumulados, vacío = toca recargar).
+            // Balas que te quedan (lleno = cargador nuevo, vacío = toca recargar).
             sliderMunicion.value = disparosPorCargador - gastados;
         }
 
         // Iconos: se apagan en el ORDEN DEL ARRAY. El de índice 0 es el primero en irse, así que
-        // arrastrá Municion_1 al slot 0 y Municion_2 al 1. Se vuelven a prender solos al recargar
-        // o al clavar un anclaje, porque ahí el cargador se recupera de verdad.
+        // arrastrá Municion_1 al slot 0 y Municion_2 al 1. Se vuelven a prender solos al recargar con R.
         //
         // Solo se tocan si estamos apuntando: fuera de modo apuntado están todos apagados por
         // SetActivoUiMunicion (lo único visible en reposo es la mira normal), y forzar el SetActive

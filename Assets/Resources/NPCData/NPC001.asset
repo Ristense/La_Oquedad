@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e64435db4ccb0074693b50a739c92c81, type: 3}
+  m_Name: NPC001
+  m_EditorClassIdentifier: Assembly-CSharp::HabitanteData
+  nombre: Armando Casas Rojas
+  pesoAparicion: 1
+  prefabModelo: {fileID: 7773569558345976755, guid: 465e46dacb9219b488234f23cc61133b, type: 3}
+  saludos:
+  - WENA PO OLVIDON
+  peticiones:
+  - "Traeme un CIGARROOOOO. Y de paso fijate hacia el {DIR}, creo que hay gente all\xE1."
+  agradecimientos:
+  - Wena shoro, gracias
+  charlaPosMision: []
+  frasesSinObjetivo:
+  - No e podido dar con nadie..

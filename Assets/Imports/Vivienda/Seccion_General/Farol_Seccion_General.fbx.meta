@@ -3,7 +3,27 @@ guid: 80990a422d8ee8f4f8d56951cd4460b6
 ModelImporter:
   serializedVersion: 24600
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Emision.LuzEsferica
+    second: {fileID: 2100000, guid: 0cd57340eb351034dac927ec844b85ca, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Negro
+    second: {fileID: 2100000, guid: 74a29d8799400ca4f9370af2be5bcb60, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Placas_Oxidadas
+    second: {fileID: 2100000, guid: 20035eefcfcd58f43bed7cba998b7df0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_PocoOxidado
+    second: {fileID: 2100000, guid: bdff5446288bd8c429c1dc4fe42c40fb, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

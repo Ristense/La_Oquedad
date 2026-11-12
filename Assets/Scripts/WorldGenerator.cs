@@ -2382,6 +2382,169 @@ public class WorldGenerator : MonoBehaviour
         }
     }
 
+    // ---------- Items de pasillo ----------
+
+    [System.Serializable]
+    public class ItemPasillo
+    {
+        [Tooltip("Cofre, caja, item suelto, lo que sea. Si trae PuntoSpawnItem adentro, se resuelven igual que en las paredes (contenido por probabilidad).")]
+        public GameObject prefab;
+        [Tooltip("Qué tan seguido sale respecto a los demás de la lista (peso relativo).")]
+        [Min(0f)] public float peso = 1f;
+    }
+
+    [Header("Items de Pasillo")]
+    [Tooltip("Lo que puede aparecer tirado en los pasillos. El generador mide cada prefab (su tamaño real) y lo pone pegado a una pared de la celda, sin encimarlo con otro y sin tapar el medio del pasillo.")]
+    public ItemPasillo[] itemsPasillo;
+    [Tooltip("Probabilidad de CADA intento por celda de pasillo (hay Max Items Por Celda intentos). 0.05 con 3 intentos ≈ 1 item cada 7 celdas.")]
+    [Range(0f, 1f)]
+    public float probabilidadItemPasillo = 0.05f;
+    [Tooltip("Cuántos items como máximo en una misma celda de pasillo.")]
+    [Min(1)]
+    public int maxItemsPorCelda = 3;
+    [Tooltip("Hasta qué fracción del ancho de la celda puede ocupar un item desde la pared hacia el medio. Más grande que esto no entra (se descarta): el centro del pasillo queda siempre libre.")]
+    [Range(0.1f, 0.5f)]
+    public float profundidadMaxItemPasillo = 0.3f;
+    [Tooltip("Separación (m) entre items, y entre item y pared.")]
+    [Min(0f)]
+    public float margenItemsPasillo = 0.3f;
+    [Tooltip("Cuánto se sube sobre el piso de la celda (m), para no quedar enterrado en la malla del piso.")]
+    public float alturaItemsPasillo = 0.5f;
+    [Tooltip("Giro extra en Y (grados) de los items respecto a la pared. Si tus modelos miran para atrás, 180.")]
+    public float giroItemsPasillo = 180f;
+    [Tooltip("Cuánto se despega de la pared hacia el pasillo (m), además del margen. Para tapas abiertas o partes que sobresalen atrás.")]
+    [Min(0f)]
+    public float separacionParedItemsPasillo = 0.4f;
+
+    /// <summary>
+    /// Items tirados en un pasillo: solo en celdas de pasillo/cruce (2,3,4,5,8) vacías y con piso,
+    /// nunca en pozos, viviendas ni salas. Cada uno va pegado a una pared de la celda, de espaldas a
+    /// ella, en un lugar donde no pise a los que ya se pusieron. Determinista por semilla + celda.
+    /// </summary>
+    private void IntentarGenerarItemsPasillo(Vector3Int celda, int tipo)
+    {
+        if (itemsPasillo == null || itemsPasillo.Length == 0 || probabilidadItemPasillo <= 0f) return;
+        if (tipo != 2 && tipo != 3 && tipo != 4 && tipo != 5 && tipo != 8) return;
+
+        int x = celda.x, y = celda.y, z = celda.z;
+        if (!IsCellEmpty(x, y, z) || IsCellEmpty(x, y - 1, z)) return;
+        Vector3 centro = CeldaACentroMundoPiso(celda);
+        if (EsPosicionDePozoOSinPiso(centro + Vector3.up * 0.5f, out _)) return;
+
+        Vector3[] paredes = { Vector3.forward, Vector3.right, Vector3.back, Vector3.left };
+        var conPared = new List<Vector3>();
+        foreach (Vector3 d in paredes)
+            if (!IsCellEmpty(x + (int)d.x, y, z + (int)d.z)) conPared.Add(d);
+        if (conPared.Count == 0) return;
+
+        float pesoTotal = 0f;
+        foreach (ItemPasillo it in itemsPasillo)
+            if (it != null && it.prefab != null) pesoTotal += it.peso;
+        if (pesoTotal <= 0f) return;
+
+        var rng = new System.Random(semillaDelMundo ^ (x * 73856093) ^ (y * 19349663) ^ (z * 83492791) ^ 0x1735);
+        float mitad = cellSize * 0.5f;
+        var ocupados = new List<Rect>();
+
+        for (int intento = 0; intento < maxItemsPorCelda; intento++)
+        {
+            if (rng.NextDouble() >= probabilidadItemPasillo) continue;
+
+            GameObject prefab = null;
+            double tirada = rng.NextDouble() * pesoTotal;
+            foreach (ItemPasillo it in itemsPasillo)
+            {
+                if (it == null || it.prefab == null) continue;
+                prefab = it.prefab;
+                tirada -= it.peso;
+                if (tirada <= 0) break;
+            }
+            if (prefab == null) continue;
+
+            GameObject go = Instantiate(prefab, transform);
+            Bounds local = LimitesLocales(go);
+            bool puesto = false;
+
+            for (int prueba = 0; prueba < 6 && !puesto; prueba++)
+            {
+                Vector3 dir = conPared[rng.Next(conPared.Count)];
+                Vector3 lateral = new Vector3(dir.z, 0f, -dir.x);
+                Quaternion rot = Quaternion.LookRotation(-dir, Vector3.up) * Quaternion.Euler(0f, giroItemsPasillo, 0f); // de espaldas a la pared
+
+                float ancho = local.size.x, prof = local.size.z;
+                if (prof > cellSize * profundidadMaxItemPasillo) continue;
+                float juego = mitad - ancho * 0.5f - margenItemsPasillo;
+                if (juego < 0f) continue;
+
+                float corrimiento = (float)(rng.NextDouble() * 2.0 - 1.0) * juego;
+                Vector3 c = centro + dir * (mitad - prof * 0.5f - margenItemsPasillo - separacionParedItemsPasillo) + lateral * corrimiento;
+
+                Vector3 extension = new Vector3(Mathf.Abs(dir.x) * prof + Mathf.Abs(lateral.x) * ancho, 0f,
+                                                Mathf.Abs(dir.z) * prof + Mathf.Abs(lateral.z) * ancho);
+                Rect huella = new Rect(c.x - extension.x * 0.5f - margenItemsPasillo, c.z - extension.z * 0.5f - margenItemsPasillo,
+                                       extension.x + margenItemsPasillo * 2f, extension.z + margenItemsPasillo * 2f);
+                bool pisa = false;
+                foreach (Rect r in ocupados) if (r.Overlaps(huella)) { pisa = true; break; }
+                if (pisa) continue;
+
+                // El centro de los límites (no el pivote) va al lugar elegido, y la base sobre el piso.
+                Vector3 offsetCentro = rot * new Vector3(local.center.x, 0f, local.center.z);
+                go.transform.SetPositionAndRotation(
+                    new Vector3(c.x, centro.y + alturaItemsPasillo - local.min.y, c.z) - offsetCentro, rot);
+                ocupados.Add(huella);
+                puesto = true;
+            }
+
+            if (!puesto) { Destroy(go); continue; }
+
+            go.name = $"{prefab.name} · pasillo {celda}";
+            Congelar(go);
+
+            int hash = semillaDelMundo + x * 61861 + y * 17377 + z * 93719 + intento * 7919;
+            Random.State prev = Random.state;
+            Random.InitState(hash);
+            ProcesarPuntosSpawnItem(go, celda);
+            Random.state = prev;
+
+            go.SetActive(false); // lo prende la burbuja junto con la celda
+            RegistrarEnCelda(celda, go);
+        }
+    }
+
+    /// <summary>
+    /// Límites del objeto en SU espacio local (sin rotación del mundo), sumando las mallas de todos
+    /// sus hijos. Usa las mallas y no Renderer.bounds porque sirve aunque el objeto esté apagado.
+    /// </summary>
+    private static Bounds LimitesLocales(GameObject go)
+    {
+        Matrix4x4 aLocal = go.transform.worldToLocalMatrix;
+        bool hay = false;
+        Bounds res = new Bounds(Vector3.zero, Vector3.zero);
+
+        void Sumar(Mesh malla, Transform t)
+        {
+            if (malla == null) return;
+            Bounds b = malla.bounds;
+            Matrix4x4 m = aLocal * t.localToWorldMatrix;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 esquina = b.center + Vector3.Scale(b.extents,
+                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                Vector3 p = m.MultiplyPoint3x4(esquina);
+                if (!hay) { res = new Bounds(p, Vector3.zero); hay = true; }
+                else res.Encapsulate(p);
+            }
+        }
+
+        foreach (MeshFilter mf in go.GetComponentsInChildren<MeshFilter>(true)) Sumar(mf.sharedMesh, mf.transform);
+        foreach (SkinnedMeshRenderer sm in go.GetComponentsInChildren<SkinnedMeshRenderer>(true)) Sumar(sm.sharedMesh, sm.transform);
+
+        if (!hay) res = new Bounds(Vector3.up * 0.5f, Vector3.one);
+        // La escala del objeto raíz no entra en su espacio local: se aplica a mano.
+        Vector3 s = go.transform.lossyScale;
+        return new Bounds(Vector3.Scale(res.center, s), Vector3.Scale(res.size, s));
+    }
+
     // ---------- Cofres de misión ----------
 
     [Header("Misiones de Cofre")]
@@ -4197,6 +4360,8 @@ public class WorldGenerator : MonoBehaviour
                 GenerarLucesTechoSala(celda, x, y, z, origin, salaLuces);
             }
         }
+
+        IntentarGenerarItemsPasillo(celda, tipo);
 
         bool celdaActualVacia = IsCellEmpty(x, y, z);
 
