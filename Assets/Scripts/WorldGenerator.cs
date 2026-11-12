@@ -398,6 +398,10 @@ public class WorldGenerator : MonoBehaviour
     private readonly Dictionary<Vector3Int, bool> cacheCierre = new Dictionary<Vector3Int, bool>();
     // Conectividad por isla (región → set de chunks estructura conectados al esqueleto)
     private readonly Dictionary<Vector3Int, HashSet<Vector3Int>> cacheIslaConectada = new Dictionary<Vector3Int, HashSet<Vector3Int>>();
+    // Árbol del BFS de cada isla: chunk → el vecino lateral por el que quedó conectado al esqueleto.
+    // Ese enlace se talla SIEMPRE (EnlaceForzado), así la conexión deja de depender de que los
+    // tipos de pasillo sorteados justo apunten uno hacia el otro.
+    private readonly Dictionary<Vector3Int, Vector3Int> padreEnIsla = new Dictionary<Vector3Int, Vector3Int>();
     // Región → ¿su isla es una Sala Colosal? Cacheado aparte porque CentroIsla lo consulta, y
     // CentroIsla está en el camino caliente de EnIsla/tipado: sin caché, cada llamada pagaría un
     // Random.InitState extra en TODO el mundo, haya salas colosales o no.
@@ -445,6 +449,18 @@ public class WorldGenerator : MonoBehaviour
     public bool pilaresEnSalaColosal = true;
     [Tooltip("En el casco (la cara EXTERNA de la cáscara: paredes, panza y coronación) poner siempre la piel exterior, ignorando probabilidadParedExterior/PisoExterior/TechoExterior. Con los valores por defecto (0.18 y 0.5) el casco saldría parchado, con agujeros por donde se ve la cara de atrás. Apagalo si querés un casco deliberadamente incompleto/en ruinas.")]
     public bool cascoColosalSiempreConPielExterior = true;
+    [Tooltip("Relieve tipo tetris en la sala colosal: bloques macizos que salen hacia adentro desde el techo y las paredes, cada uno con su profundidad. El piso y la franja de abajo de las paredes (por donde entran los puentes) no se tocan. Determinista por semilla.")]
+    public bool relieveColosal = true;
+    [Tooltip("Tamaño (en celdas) de cada bloque del relieve. 3 = bloques de 60 m. Más grande = piezas más gruesas y menos cantidad.")]
+    [Min(1)]
+    public int bloqueRelieveColosal = 3;
+    [Tooltip("Probabilidad de que un bloque tenga relieve. El resto queda liso.")]
+    [Range(0f, 1f)]
+    public float probabilidadBloqueRelieveColosal = 0.6f;
+    [Tooltip("Cuántas celdas baja cada bloque del TECHO (mín, máx).")]
+    public Vector2Int profundidadRelieveTecho = new Vector2Int(1, 4);
+    [Tooltip("Cuántas celdas sale hacia adentro cada bloque de las PAREDES (mín, máx).")]
+    public Vector2Int profundidadRelievePared = new Vector2Int(1, 3);
 
     [Header("Forma de las Comunidades (donde vive la gente)")]
     [Tooltip("ON = cada comunidad tiene su propia silueta por bloques, tipo tetris: techos a distintas alturas y esquinas mordidas en planta. El 3x3 interior de la planta baja (centro + secciones) y las 4 puertas no se tapan nunca. Todo determinista por semilla.\n\nOFF = el cubo hueco de 5x5 de siempre.")]
@@ -609,6 +625,7 @@ public class WorldGenerator : MonoBehaviour
         cacheDirBalcon.Clear();
         cacheCierre.Clear();
         cacheIslaConectada.Clear();
+        padreEnIsla.Clear();
         cacheIslaColosal.Clear();
         cacheIslaSinViviendas.Clear();
         cacheCuartelIsla.Clear();
@@ -663,6 +680,8 @@ public class WorldGenerator : MonoBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(teclaDiagnosticoChunk)) DiagnosticarChunkApuntado();
+
         if (jugador != null && mundoListo)
         {
             // MundoACelda resta transform.position: la grilla lógica es LOCAL al WorldGenerator,
@@ -1105,6 +1124,7 @@ public class WorldGenerator : MonoBehaviour
         cacheDirBalcon.Clear();
         cacheCierre.Clear();
         cacheIslaConectada.Clear();
+        padreEnIsla.Clear();
         cacheIslaColosal.Clear();
         cacheIslaSinViviendas.Clear();
         cacheCuartelIsla.Clear();
@@ -3070,6 +3090,24 @@ public class WorldGenerator : MonoBehaviour
         return altura;
     }
 
+    /// <summary>
+    /// ¿El paso entre estos dos chunks vecinos se talla sí o sí? Sí, cuando uno es el "padre" del
+    /// otro en el BFS de la isla (ChunksConectadosDeIsla): es justo el vecino por el que ese chunk
+    /// quedó dado por conectado. Sin esto la conectividad era solo de vecindad: un pasillo X cuyo
+    /// único vecino estaba en Z no tallaba ningún paso y quedaba flotando, a 40 m de la estructura.
+    /// Solo a la altura de pasillo (ly == 1). Es simétrico: los dos chunks tallan su mitad.
+    /// </summary>
+    private bool EnlaceForzado(int ax, int ay, int az, int bx, int by, int bz, int ly)
+    {
+        if (ly != 1) return false;
+        Vector3Int a = new Vector3Int(ax, ay, az), b = new Vector3Int(bx, by, bz);
+        // Asegurar que el BFS de la isla de cada uno ya corrió (llena padreEnIsla).
+        if (EnIsla(ax, ay, az)) ChunksConectadosDeIsla(RegionDeChunk(ax, ay, az));
+        if (EnIsla(bx, by, bz)) ChunksConectadosDeIsla(RegionDeChunk(bx, by, bz));
+        return (padreEnIsla.TryGetValue(a, out Vector3Int pa) && pa == b)
+            || (padreEnIsla.TryGetValue(b, out Vector3Int pb) && pb == a);
+    }
+
     private bool CalcularCeldaVacia(int x, int y, int z)
     {
         // 1. Coordenadas del Macro Chunk
@@ -3105,28 +3143,28 @@ public class WorldGenerator : MonoBehaviour
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx - 1, my, mz);
                 bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
-                if (HasConnection(tipoVecino, Vector3Int.right, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.left, ly))) return true;
+                if (HasConnection(tipoVecino, Vector3Int.right, ly) || (vecinoEstructura && (HasConnection(tipo, Vector3Int.left, ly) || EnlaceForzado(mx, my, mz, mx - 1, my, mz, ly)))) return true;
             }
             // Conexión con el vecino derecho (X+)
             if (lz == 2 && (lx == 3 || lx == 4))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx + 1, my, mz);
                 bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
-                if (HasConnection(tipoVecino, Vector3Int.left, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.right, ly))) return true;
+                if (HasConnection(tipoVecino, Vector3Int.left, ly) || (vecinoEstructura && (HasConnection(tipo, Vector3Int.right, ly) || EnlaceForzado(mx, my, mz, mx + 1, my, mz, ly)))) return true;
             }
             // Conexión con el vecino de atrás (Z-)
             if (lx == 2 && (lz == 0 || lz == 1))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx, my, mz - 1);
                 bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
-                if (HasConnection(tipoVecino, Vector3Int.forward, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.back, ly))) return true;
+                if (HasConnection(tipoVecino, Vector3Int.forward, ly) || (vecinoEstructura && (HasConnection(tipo, Vector3Int.back, ly) || EnlaceForzado(mx, my, mz, mx, my, mz - 1, ly)))) return true;
             }
             // Conexión con el vecino de adelante (Z+)
             if (lx == 2 && (lz == 3 || lz == 4))
             {
                 int tipoVecino = ObtenerTipoMacroChunk(mx, my, mz + 1);
                 bool vecinoEstructura = !EsTipoSalaAbierta(tipoVecino) && tipoVecino != 9;
-                if (HasConnection(tipoVecino, Vector3Int.back, ly) || (vecinoEstructura && HasConnection(tipo, Vector3Int.forward, ly))) return true;
+                if (HasConnection(tipoVecino, Vector3Int.back, ly) || (vecinoEstructura && (HasConnection(tipo, Vector3Int.forward, ly) || EnlaceForzado(mx, my, mz, mx, my, mz + 1, ly)))) return true;
             }
         }
 
@@ -3180,7 +3218,7 @@ public class WorldGenerator : MonoBehaviour
                      // borde del volumen de isla) queda sólida y todo lo de adentro hueco — así el
                      // generador de superficies ya existente le pone piso abajo, techo arriba y
                      // muros a los lados, porque ninguna de esas caras da al vacío (tipo 9).
-                return !EsCascaraSalaColosal(x, y, z);
+                return !EsCascaraSalaColosal(x, y, z) && !EsRelieveSalaColosal(x, y, z);
 
             default:
                 return false;
@@ -6880,10 +6918,90 @@ public class WorldGenerator : MonoBehaviour
         Random.state = estadoViejo;
     }
 
-    /// <summary>Dibuja cada CELDA activa (no macro chunk) como wire cube — solo en Play, con Gizmos on en la Scene view.</summary>
+    // ---------- Diagnóstico de chunks (debug) ----------
+
+    [Header("Diagnóstico de Chunks (debug)")]
+    [Tooltip("Apuntá a una pieza (o volá hasta ella) y apretá esta tecla: la consola dice qué macro chunk es, de qué tipo, y POR QUÉ existe (isla, puente, cuartel, conectividad) más el tipo de sus 6 vecinos.")]
+    public KeyCode teclaDiagnosticoChunk = KeyCode.F4;
+
+    private void DiagnosticarChunkApuntado()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, 10000f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            // Un pelín adentro de la pieza, para no caer justo en el borde entre dos chunks.
+            Vector3 dentro = hit.point + cam.transform.forward * 1f;
+            string ruta = hit.collider.name;
+            for (Transform t = hit.collider.transform.parent; t != null && t != transform; t = t.parent) ruta = t.name + "/" + ruta;
+            Debug.Log($"[Chunk] APUNTADO a {hit.distance:F0} m · objeto '{ruta}' · celda {MundoACelda(dentro)}\n{DescribirChunk(MundoAMacroChunk(dentro))}");
+        }
+        else
+        {
+            Debug.Log($"[Chunk] El rayo no pegó en nada. Chunk DONDE ESTÁS:\n{DescribirChunk(MundoAMacroChunk(cam.transform.position))}");
+        }
+    }
+
+    private static string NombreTipoChunk(int t)
+    {
+        switch (t)
+        {
+            case 1: return "1 cuartel";
+            case 2: return "2 pasillo Z";
+            case 3: return "3 pasillo X";
+            case 4: return "4 pasillo L";
+            case 5: return "5 cruce +";
+            case 6: return "6 pozo";
+            case 7: return "7 sala grande";
+            case 8: return "8 cruce T";
+            case 9: return "9 VACÍO";
+            case 10: return "10 sala colosal";
+            case 11: return "11 comunidad";
+            default: return t.ToString();
+        }
+    }
+
+    private string DescribirChunk(Vector3Int m)
+    {
+        var sb = new System.Text.StringBuilder();
+        int tipo = ObtenerTipoMacroChunk(m.x, m.y, m.z);
+        Vector3Int region = RegionDeChunk(m.x, m.y, m.z);
+        Vector3Int centro = CentroIsla(region.x, region.y, region.z, out int radio, out int radioY, out bool esCaja);
+        bool enIsla = EnIsla(m.x, m.y, m.z);
+        int puente = TipoPuente(m.x, m.y, m.z);
+        bool candidato = EsCandidatoEstructura(m);
+        bool conectado = enIsla && ChunksConectadosDeIsla(region).Contains(m);
+
+        sb.AppendLine($"  macro {m} · tipo {NombreTipoChunk(tipo)} · semilla {semillaDelMundo}");
+        sb.AppendLine($"  región {region} · centro de isla {centro} · radio XZ {radio}, Y {radioY} · {(esCaja ? "caja" : "elipsoide")}{(EsIslaColosalDeChunk(m.x, m.y, m.z) ? " · COLOSAL" : "")}");
+        sb.AppendLine($"  en isla: {enIsla} · puente: {puente} · columna-pozo en vacío: {EsColumnaPozoEnVacio(m.x, m.y, m.z)}");
+        sb.AppendLine($"  cuartel forzado: {enIsla && EsChunkCuartelDeIsla(m.x, m.y, m.z)} · sala forzada: {enIsla && EsChunkSalaDeIsla(m.x, m.y, m.z)} · spawn forzado: {m == Vector3Int.zero}");
+        sb.AppendLine($"  densidad {ObtenerDensidad(m.x, m.y, m.z):F3} (umbral vacío {umbralVacioIsla}) · candidato: {candidato} · conectado al esqueleto: {conectado} · toca vacío: {enIsla && ChunkTocaVoid(m.x, m.y, m.z)}");
+
+        Vector3Int[] dirs = { Vector3Int.right, Vector3Int.left, Vector3Int.forward, Vector3Int.back, Vector3Int.up, Vector3Int.down };
+        string[] nombres = { "+X", "-X", "+Z", "-Z", "arriba", "abajo" };
+        sb.Append("  vecinos:");
+        int lateralesConEstructura = 0;
+        for (int i = 0; i < dirs.Length; i++)
+        {
+            Vector3Int n = m + dirs[i];
+            int tn = ObtenerTipoMacroChunk(n.x, n.y, n.z);
+            if (i < 4 && tn != 9) lateralesConEstructura++;
+            sb.Append($" {nombres[i]}={NombreTipoChunk(tn)};");
+        }
+        sb.AppendLine();
+        if (tipo != 9 && lateralesConEstructura == 0)
+            sb.AppendLine("  ⚠️ SUELTO: no tiene ningún vecino lateral con estructura.");
+        return sb.ToString();
+    }
+
+    [Tooltip("Debug: dibuja en la Scene el borde de cada celda cargada (y la del spawn en verde).")]
+    public bool dibujarBordesCeldas = false;
+
     void OnDrawGizmos()
     {
-        if (Application.isPlaying)
+        if (Application.isPlaying && dibujarBordesCeldas)
         {
             Vector3 origin = transform.position;
             foreach(Vector3Int celda in celdasActivas)
@@ -7455,6 +7573,7 @@ public class WorldGenerator : MonoBehaviour
                 if (!EnIsla(n.x, n.y, n.z)) continue;
                 if (!EsCandidatoEstructura(n)) continue;
                 set.Add(n);
+                padreEnIsla[n] = c;
                 frontera.Enqueue(n);
             }
         }
@@ -7901,6 +8020,68 @@ public class WorldGenerator : MonoBehaviour
         return !CeldaEnIslaColosal(x + g, y, z) || !CeldaEnIslaColosal(x - g, y, z)
             || !CeldaEnIslaColosal(x, y + g, z) || !CeldaEnIslaColosal(x, y - g, z)
             || !CeldaEnIslaColosal(x, y, z + g) || !CeldaEnIslaColosal(x, y, z - g);
+    }
+
+    /// <summary>
+    /// Relieve tipo tetris de la sala colosal: bloques sólidos que salen hacia adentro desde el
+    /// TECHO y desde las PAREDES, con profundidad por bloque (misma idea que FormaComunidad: por
+    /// bloques y no celda a celda, para que salgan piezas definidas y no un serrucho).
+    ///
+    /// Cada bloque arranca pegado a su techo o a su pared y es macizo hasta su profundidad, así que
+    /// nunca queda nada flotando. Lo que NO se toca: el piso, y en las paredes la franja de abajo
+    /// (el primer nivel de macro chunk entero), que es donde entran los puentes — las bocas hacia
+    /// la sala quedan intactas. Determinista por semilla + región + bloque, sin tocar el Random.
+    /// </summary>
+    private bool EsRelieveSalaColosal(int x, int y, int z)
+    {
+        if (!relieveColosal) return false;
+
+        int s = macroSize;
+        int mx = Mathf.FloorToInt((float)x / s), my = Mathf.FloorToInt((float)y / s), mz = Mathf.FloorToInt((float)z / s);
+        Vector3Int region = RegionDeChunk(mx, my, mz);
+        Vector3Int c = CentroIsla(region.x, region.y, region.z, out int radio, out int radioY, out _);
+
+        // Interior de la sala (sin la cáscara), en celdas.
+        int g = Mathf.Max(1, grosorCascaraColosal);
+        int minX = (c.x - radio) * s + g, maxX = (c.x + radio) * s + s - 1 - g;
+        int minZ = (c.z - radio) * s + g, maxZ = (c.z + radio) * s + s - 1 - g;
+        int minY = (c.y - radioY) * s + g, maxY = (c.y + radioY) * s + s - 1 - g;
+        if (x < minX || x > maxX || y < minY || y > maxY || z < minZ || z > maxZ) return false;
+
+        int b = Mathf.Max(1, bloqueRelieveColosal);
+        int semilla = semillaDelMundo ^ (region.x * 73939) ^ (region.y * 19391) ^ (region.z * 51283);
+
+        // Que el relieve nunca cierre la sala: como mucho un cuarto del ancho / del alto.
+        int topeTecho = Mathf.Max(0, (maxY - minY + 1) / 4);
+        int topePared = Mathf.Max(0, (Mathf.Min(maxX - minX, maxZ - minZ) + 1) / 4);
+
+        // TECHO: bloques sobre el plano X/Z.
+        int dTecho = ProfundidadBloqueRelieve(semilla, 0, (x - minX) / b, (z - minZ) / b, profundidadRelieveTecho, topeTecho);
+        if (y > maxY - dTecho) return true;
+
+        // PAREDES: bloques sobre (largo de la pared, altura). La franja de abajo queda libre.
+        int yLibre = minY + s;
+        if (y < yLibre) return false;
+        int bv = (y - yLibre) / b;
+        if (x - minX < ProfundidadBloqueRelieve(semilla, 1, (z - minZ) / b, bv, profundidadRelievePared, topePared)) return true;
+        if (maxX - x < ProfundidadBloqueRelieve(semilla, 2, (z - minZ) / b, bv, profundidadRelievePared, topePared)) return true;
+        if (z - minZ < ProfundidadBloqueRelieve(semilla, 3, (x - minX) / b, bv, profundidadRelievePared, topePared)) return true;
+        if (maxZ - z < ProfundidadBloqueRelieve(semilla, 4, (x - minX) / b, bv, profundidadRelievePared, topePared)) return true;
+        return false;
+    }
+
+    /// <summary>Profundidad (en celdas) del bloque (bu, bv) de una cara; 0 = ese bloque queda liso.</summary>
+    private int ProfundidadBloqueRelieve(int semilla, int cara, int bu, int bv, Vector2Int rango, int tope)
+    {
+        uint h = (uint)(semilla + cara * 374761393 + bu * 668265263 + bv * 2147483629);
+        h ^= h >> 15; h *= 0x2C1B3C6D; h ^= h >> 12; h *= 0x297A2D39; h ^= h >> 15;
+
+        if ((h & 0xFFFF) / 65535f >= probabilidadBloqueRelieveColosal) return 0;
+
+        int min = Mathf.Max(0, Mathf.Min(rango.x, rango.y));
+        int max = Mathf.Max(min, Mathf.Max(rango.x, rango.y));
+        int d = min + (int)((h >> 16) % (uint)(max - min + 1));
+        return Mathf.Min(d, tope);
     }
 
     private bool EnIsla(int mx, int my, int mz)

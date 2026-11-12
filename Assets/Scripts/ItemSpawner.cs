@@ -10,6 +10,9 @@ public class ItemSpawner : MonoBehaviour
     [Tooltip("Lista de prefabs que pueden aparecer aquí (tuberías, chatarra, etc).")]
     public GameObject[] itemsPosibles;
 
+    [Tooltip("ON = el objeto toma la rotación de este empty (sumada a la rotación propia del prefab). OFF = sale con la rotación del prefab tal cual, sin importar cómo esté girado el empty.")]
+    public bool seguirRotacion = true;
+
     void Start()
     {
         // Generar una semilla única basada en la posición física en el mundo para evitar que todos los spawners
@@ -26,7 +29,10 @@ public class ItemSpawner : MonoBehaviour
             
             // 3. Instanciar el item exactamente en la posición y rotación de este punto vacío
             // Lo hacemos hijo del mismo padre (la pared) para mantener todo ordenado
-            Instantiate(prefabElegido, transform.position, transform.rotation, transform.parent);
+            Quaternion rot = seguirRotacion
+                ? transform.rotation * prefabElegido.transform.rotation
+                : prefabElegido.transform.rotation;
+            Instantiate(prefabElegido, transform.position, rot, transform.parent);
         }
 
         // Restaurar el estado aleatorio global para no interferir con otros sistemas
