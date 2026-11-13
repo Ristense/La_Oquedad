@@ -152,12 +152,6 @@ MonoBehaviour:
   pasarelaOffset: 0.5
   probabilidadPasarela: 0.866
   pasarelaRotationOffset: 0
-  prefabsObjetoBorde: []
-  probabilidadObjetoBorde: 0.35
-  objetosPorCara: {x: 1, y: 3}
-  anchoFranjaBorde: 2
-  margenFranjaBorde: 1
-  objetoBordeMiraAlPasillo: 0
   prefabsCierrePasillo:
   - {fileID: 6799703917082212387, guid: 54c0fa1248c707844b331cf3c408bad5, type: 3}
   cierreOffset: 0

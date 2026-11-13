@@ -1,0 +1,168 @@
+================================================================================
+  IN SIDE US — PERILLAS DEL WORLDGENERATOR (Modo BLAME / Islas)
+  Referencia rápida de qué mueve cada campo del inspector.
+  Actualizado: 2026-07-13
+================================================================================
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ISLAS + PUENTES (LA generación del mundo)                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ⚠ LIMPIEZA 2026-07-13: el "modo denso" fue ELIMINADO del código, junto con
+  la Gran Pared, los Vacíos tallados, las tuberías/luces de pared y el spawn
+  por búsqueda de sala. Las islas son LA generación. Regla nueva del inspector:
+  si un sistema tiene slider de probabilidad, NO tiene toggle (prob 0 = off).
+
+■ Periodo Islas  ⭐ LA PERILLA DEL RITMO                  [actual: 8]
+  Cada cuántos chunks (1 chunk = 100 m) hay una isla. Define la SEPARACIÓN
+  entre islas y el LARGO de los puentes.
+  · FÓRMULA: largo de puente ≈ (periodo − 2×radio promedio) × 100 m
+  · SUBIR  → islas más lejos, puentes más largos, más soledad BLAME
+             (13 = puentes de 700-900 m ≈ 2 min volando / 3-4 caminando)
+  · BAJAR  → viajes cortos (8 con radio (2,3) = puentes de 200-400 m ≈ 1 min)
+  · Mínimo útil: 7 (bajo eso las islas casi se tocan)
+
+■ Radio Isla Chunks                                       [actual: (2, 3)]
+  Radio de cada isla en chunks, aleatorio por isla dentro del rango.
+  Diámetro = radio × 2 × 100 m → (2,3) = islas de 400-600 m de lado.
+  · SUBIR  → islas monumentales (ojo: acorta los puentes si no subís periodo)
+  · BAJAR  → puestos de avanzada chicos
+  · El máximo real se clampea a (periodo−1)/2 − 1 para caber en su región.
+
+■ Probabilidad Puente                                     [actual: 0.75]
+  Chance de puente hacia cada vecina (+X y +Z por isla).
+  · SUBIR  → casi siempre camino directo
+  · BAJAR  → más rodeos y callejones, más hostil
+  · GARANTÍA dura: si ambos rolls fallan se fuerza el de +X.
+    Ninguna isla queda sin salida, nunca.
+
+■ Prefabs Puerta Boca Vacio                               [actual: vacío]
+  Compuertas que se instalan en las bocas de pasillo que dan al VOID:
+  salir al vacío pasa a ser deliberado (abrís la puerta y ves la nada).
+  · Asigná tu prefab de compuerta interactiva para activarlo.
+  · Lista vacía = bocas abiertas con su marco de término (como ahora).
+
+■ Umbral Vacio Isla  ⭐ POROSIDAD                          [actual: 0.45]
+  Chunks con densidad bajo este umbral son vacío TAMBIÉN dentro de la isla.
+  La isla es un enjambre de estructuras expuestas, no un bloque encapsulado.
+  · SUBIR  → isla esquelética/rala (0.50-0.55 = puro esqueleto)
+  · BAJAR  → isla maciza (0.35 = mucha carne; 0 = bloque sólido, vuelve
+             el efecto "caja" que no te gustaba)
+  · Los chunks que la porosidad deja aislados se PODAN solos (BFS de
+    conectividad hasta la columna-pozo) — nada flota suelto.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  DENSIDAD (tipado de chunks — el "ADN" interno de las islas)                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+■ Umbral Densidad Alta                                    [actual: 0.55]
+  Densidad SOBRE este valor = complejos industriales densos:
+  Sala/Vivienda (1), Cruce + (5), Pozo (6), Cruce T (8).
+  · SUBIR → menos zonas industriales, más pasillos
+  · BAJAR → más salas y cruces, laberinto más denso
+
+■ Umbral Densidad Media                                   [actual: 0.3]
+  Entre este valor y el Alto = pasillos: recto Z (2), recto X (3), en L (4).
+  · En modo islas el rango útil real es [Umbral Vacio Isla … 1.0] porque
+    la porosidad se come todo lo de abajo.
+
+■ Umbral Densidad Baja                                    [actual: 0.2]
+  Entre este valor y el Medio = Sala Grande/atrio (7). Debajo = Abismo (9).
+  · En modo islas casi NO aplica (la porosidad con 0.45 se come ese rango).
+    Relevante solo en modo denso.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  GENERACIÓN / RENDIMIENTO                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+■ Ms Presupuesto Burbuja                                  [actual: 5]
+  Milisegundos POR FRAME que el generador gasta creando/apagando celdas.
+  · SUBIR → carga más rápida, menos FPS en ráfagas (8-10 razonable)
+  · BAJAR → más fluido, carga más lenta (3 mínimo útil)
+
+■ Radio Vision  ⚠ CLAMPEADO A 8                           [actual: (clamp 8)]
+  Radio de la burbuja de celdas activas (celdas de 20 m). 8 = 160 m.
+  · Subirlo en el inspector NO hace nada sobre 8: el código clampea porque
+    el costo crece al CUBO (radio 20 = 68.921 celdas y el streaming muere).
+  · Para ver islas lejanas la solución son impostores/siluetas (pendiente),
+    NO subir el radio.
+
+■ Semilla Del Mundo                                       [actual: 7777775]
+  Misma semilla = exactamente el mismo mundo (islas, puentes, misiones, loot).
+  · Anotá las semillas de los mundos que te gusten.
+  · "Usar Semilla Aleatoria" ON = mundo nuevo en cada Play.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  PIEL DE LAS ESTRUCTURAS (por si se ven huecos / "rayos X")                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+■ Probabilidad Pared Exterior  ⭐
+  Chance de que cada cara de estructura reciba su placa exterior decorada.
+  · En modo islas conviene 1.0: las estructuras se ven desde el void por
+    estas placas. Menos de 1.0 = agujeros con vista al interior (rayos X).
+
+■ Probabilidad Piso Exterior / Techo Exterior
+  Ídem para las placas horizontales de los tubos. Recomendado 1.0 en islas.
+
+■ Probabilidad Cierre                                     [actual: ~0.93]
+  Chance de puerta en cada CAMBIO DE SECCIÓN (las puertas ya NO se riegan
+  por los pasillos: solo aparecen donde el pasillo cruza a un chunk de tipo
+  distinto — recto→T, pasillo→vivienda, entrada a sala grande).
+  · SUBIR  → casi toda transición tiene su puerta (secciones selladas)
+  · BAJAR  → puertas ocasionales (0.4-0.6 = balance atmósfera/fluidez)
+  · Nunca hacia el void: esas bocas usan Prefabs Puerta Boca Vacio.
+
+
+================================================================================
+  RECETAS RÁPIDAS (combinaciones probadas)
+================================================================================
+
+  Config               Periodo  Radio   UmbralVacio  ProbPuente  Resultado
+  ────────────────────────────────────────────────────────────────────────────
+  ACTUAL (equilibrada)    8     (2,3)      0.45        0.75      Islas 400-600m cada ~800m,
+                                                                 puentes 200-400m (~1 min a pie)
+  MÁXIMO BLAME           13     (2,3)      0.50        0.60      Puentes 700-900m, islas ralas,
+                                                                 caminatas de 3-4 min por la nada
+  Exploración ágil        7     (2,3)      0.40        0.85      Islas casi encadenadas,
+                                                                 puentes de 100-300m
+  Fortalezas macizas     11     (3,3)      0.35        0.75      Islas de 600m densas por dentro,
+                                                                 ~500m de puente entre ellas
+  Enjambre fino           9     (2,3)      0.55        0.75      Todo esqueleto — más rapel,
+                                                                 más vértigo, menos pasillo
+  (El "mundo denso clásico" fue ELIMINADO del código — para algo parecido:
+   umbralVacioIsla = 0 + radio (3,3) + periodo 7 = islas macizas casi pegadas)
+
+
+================================================================================
+  REGLAS DE ORO
+================================================================================
+
+  1. Largo de puente ≈ (Periodo Islas − radios de las 2 islas) × 100 m.
+     Es LA fórmula del ritmo de exploración.
+
+  2. Misma semilla = mismo mundo, siempre. Anotá las que te gusten.
+
+  3. ¿"Rayos X" (interiores visibles desde el void)?
+     → Probabilidad Pared Exterior = 1.0
+
+  4. ¿"No genera nada" al avanzar?
+     → Revisá la consola por errores ROJOS (una excepción mata el worker).
+     → Recordá: el radio real de carga son 160 m (clamp 8) — en el void
+       gigante se siente vacío aunque funcione bien.
+
+  5. Toda isla tiene SIEMPRE: ≥1 puente garantizado, columna-pozo central
+     (el shaft vertical que conecta todos los niveles) y lanes de puente
+     que la cruzan a nivel base hasta el centro.
+
+  6. El spawn en modo islas es SIEMPRE el chunk (0,0,0), parado sobre la
+     lane principal de la isla origen. Salís de la sala → estás en el
+     corredor que lleva al puente.
+
+  7. Navegación dentro de una isla: buscá la COLUMNA CENTRAL (pozo) →
+     bajá al nivel base → las lanes salen de ahí hacia los puentes.
+
+================================================================================

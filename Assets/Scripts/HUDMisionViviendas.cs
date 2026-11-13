@@ -33,21 +33,30 @@ public class HUDMisionViviendas : MonoBehaviour
 
     void Update()
     {
-        if (Time.time < proximoRefresco) return;
-        proximoRefresco = Time.time + intervaloRefresco;
+        // Tiempo SIN escalar: con el juego en pausa (timeScale 0) Time.time no avanza y el texto
+        // se quedaba pegado.
+        if (Time.unscaledTime < proximoRefresco) return;
+        proximoRefresco = Time.unscaledTime + intervaloRefresco;
 
         WorldGenerator wg = WorldGenerator.Instance;
+        if (wg == null) wg = FindFirstObjectByType<WorldGenerator>();
         if (wg == null) return;
 
-        if (txtPosicionJugador != null && wg.jugador != null)
+        if (txtPosicionJugador != null)
         {
-            Vector3Int celda = wg.MundoACelda(wg.jugador.position);
-            txtPosicionJugador.text = $"Jugador: celda {celda}";
+            // La celda sale de la CÁMARA: es donde estás mirando el mundo de verdad. Si se usara
+            // solo wg.jugador y esa referencia queda vieja o apunta a otro objeto, el texto no cambia.
+            Camera cam = Camera.main;
+            Transform t = cam != null ? cam.transform : wg.jugador;
+            if (t != null)
+                txtPosicionJugador.text = $"Jugador: celda {wg.MundoACelda(t.position)}";
         }
 
         if (txtRedViviendas != null)
         {
-            txtRedViviendas.text = ConstruirTexto(wg);
+            // Si el texto de misiones falla, que no se lleve puesta la celda del jugador.
+            try { txtRedViviendas.text = ConstruirTexto(wg); }
+            catch (System.Exception e) { Debug.LogWarning($"[HUD] No se pudo armar el texto de viviendas: {e.Message}", this); }
         }
     }
 

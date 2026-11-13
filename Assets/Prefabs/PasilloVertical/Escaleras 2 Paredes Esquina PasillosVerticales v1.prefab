@@ -167,13 +167,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1264925348223151342}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.585, y: 10.422, z: 3.14}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3159877090553208035}
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &4775890568436319889
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -235,6 +235,54 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6b0c035fcf229ab4ea8461c09d52e4c0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParedPozo
+--- !u!1 &4420352726600006294
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5120886034402173356}
+  - component: {fileID: 834119312473636982}
+  m_Layer: 0
+  m_Name: Spawn_LucesGrandes (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 5721338939258241955, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5120886034402173356
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4420352726600006294}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -7.88, y: 18.69, z: 0.33}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3159877090553208035}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &834119312473636982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4420352726600006294}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b22eae70bb5e4fd49951bae356d476e8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemSpawner
+  probabilidadSpawn: 0.7
+  itemsPosibles:
+  - {fileID: 2129332450440486801, guid: e3c13b8c87498c740b4b8be687d0b2c8, type: 3}
+  seguirRotacion: 1
 --- !u!1 &7863721435515825515
 GameObject:
   m_ObjectHideFlags: 0
@@ -283,6 +331,54 @@ MonoBehaviour:
   itemsPosibles:
   - {fileID: 7808154343616377373, guid: 96d709e1568213546a4b6fff1cfca6de, type: 3}
   - {fileID: 2245849137045471142, guid: 2d99e5800a87b9e41a6a1e45123ae51f, type: 3}
+  seguirRotacion: 1
+--- !u!1 &9074448999258660185
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6864866001377409366}
+  - component: {fileID: 4071175878722102887}
+  m_Layer: 0
+  m_Name: Spawn_LucesGrandes
+  m_TagString: Untagged
+  m_Icon: {fileID: 5721338939258241955, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6864866001377409366
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9074448999258660185}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
+  m_LocalPosition: {x: -0.08, y: 9.99, z: 3.14}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3159877090553208035}
+  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+--- !u!114 &4071175878722102887
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9074448999258660185}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b22eae70bb5e4fd49951bae356d476e8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemSpawner
+  probabilidadSpawn: 0.7
+  itemsPosibles:
+  - {fileID: 0}
   seguirRotacion: 1
 --- !u!1001 &3193221484804635400
 PrefabInstance:
@@ -350,6 +446,9 @@ PrefabInstance:
       addedObject: {fileID: 1783705023618957442}
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: d7d2956bbcdfc8844a803853ee74d1c0, type: 3}
       insertIndex: -1
+      addedObject: {fileID: 6864866001377409366}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: d7d2956bbcdfc8844a803853ee74d1c0, type: 3}
+      insertIndex: -1
       addedObject: {fileID: 5792739647033940759}
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: d7d2956bbcdfc8844a803853ee74d1c0, type: 3}
       insertIndex: -1
@@ -357,6 +456,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: d7d2956bbcdfc8844a803853ee74d1c0, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6889924702193798859}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: d7d2956bbcdfc8844a803853ee74d1c0, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5120886034402173356}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 6820594879077173776, guid: d7d2956bbcdfc8844a803853ee74d1c0, type: 3}
       insertIndex: -1
