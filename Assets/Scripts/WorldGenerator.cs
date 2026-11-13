@@ -255,10 +255,10 @@ public class WorldGenerator : MonoBehaviour
     [Tooltip("Ajuste fino de cuánto sobresale el prefab del balcón desde el borde de la celda hacia la pared exterior (unidades). 0 = justo en el borde.")]
     public float balconOffset = 0f;
 
-    [Header("Tuberías Modulares (kit por conectores, v1: solo rectas y curvas 90°)")]
-    [Tooltip("Probabilidad de que un pasillo elegible (tramo recto o esquina, sin intersecciones/callejones) genere tubería (0 = apagado, 1 = siempre).")]
+    [Header("Tuberías Modulares (rectas, curvas y uniones)")]
+    [Tooltip("Probabilidad POR CELDA de pasillo. 1 = tuberías continuas; valores menores producen cortes aleatorios, rematados con tapones.")]
     [Range(0f, 1f)]
-    public float probabilidadTuberia = 0.5f;
+    public float probabilidadTuberia = 1f;
     [Tooltip("Piezas rectas de 1m. Se combinan con las de 2m y 5m para cubrir cualquier largo (ej. 7 = 5+2).")]
     public GameObject[] prefabsTuberiaRecta1m;
     [Tooltip("Piezas rectas de 2m.")]
@@ -267,6 +267,10 @@ public class WorldGenerator : MonoBehaviour
     public GameObject[] prefabsTuberiaRecta5m;
     [Tooltip("Pieza de curva 90°, para celdas esquina (2 vecinos abiertos en ángulo).")]
     public GameObject[] prefabsTuberiaCurva90;
+    [Tooltip("Pieza T opcional para celdas con 3 salidas. Sin prefab, los brazos rectos llegan hasta el centro y se juntan para no cortar el recorrido. Orientación base esperada: +X, +Z y -X; cerrado hacia -Z.")]
+    public GameObject[] prefabsTuberiaT = new GameObject[0];
+    [Tooltip("Pieza de cruce opcional para celdas con 4 salidas. Sin prefab, los cuatro brazos rectos llegan al centro y se juntan.")]
+    public GameObject[] prefabsTuberiaCruce = new GameObject[0];
     [Tooltip("Tapón / extremo roto. Se instancia SOLO en los bordes donde el vecino no continúa la tubería (empieza o termina el recorrido), nunca en el medio de un tramo.")]
     public GameObject[] prefabsTuberiaTapon;
     [Tooltip("Altura local (Y dentro de la celda) a la que corre la tubería. Por defecto cerca del techo.")]
@@ -277,6 +281,16 @@ public class WorldGenerator : MonoBehaviour
     public float longitudCurvaTuberia = 2f;
     [Tooltip("Rotación base de la curva si el prefab está modelado mirando hacia otra esquina que la NE por defecto. Ajustar en pasos de 90 (mismo patrón que yawBaseVerticeConvexo).")]
     public float yawBaseTuberiaCurva = 0f;
+    [Tooltip("Largo total del fitting entre conectores opuestos. Ejemplo: 2m coloca cada conector a 1m del centro.")]
+    public float longitudUnionTuberia = 2f;
+    [Tooltip("Yaw extra para orientar la pieza T si su orientación base difiere de brazos +X, +Z y -X.")]
+    public float yawBaseTuberiaT = 0f;
+    [Header("Debug de Tuberías")]
+    [Tooltip("Dibuja en el Game la ruta de tuberías alrededor del jugador. Celeste = pieza asignada, verde = brazos unidos al centro sin fitting, amarillo = fallo de probabilidad, naranjo = cierre, morado = final sin continuidad.")]
+    public bool dibujarDebugTuberias = true;
+    [Tooltip("Radio en celdas alrededor del jugador para mostrar la ruta y sus cortes.")]
+    [Min(1)]
+    public int radioDebugTuberias = 8;
 
     [Header("Generación de Biomas")]
     public float escalaDensidad = 0.15f;
@@ -588,6 +602,7 @@ public class WorldGenerator : MonoBehaviour
     {
         // Dibujante de los puntos de andamio: se agrega solo, se prende/apaga con dibujarPuntosAndamio.
         if (GetComponent<DebugAndamiosComunidad>() == null) gameObject.AddComponent<DebugAndamiosComunidad>();
+        if (GetComponent<DebugTuberiasModulares>() == null) gameObject.AddComponent<DebugTuberiasModulares>();
 
         // El toggle de debug manda sobre el guardado: si no, cargar la partida te devolvía a donde
         // estabas y el spawn en cuartel nunca llegaba a calcularse.
@@ -6178,6 +6193,9 @@ public class WorldGenerator : MonoBehaviour
                 restante -= pieza;
             }
         }
+        // Los carriles laterales/intersecciones pueden dejar una fracción de metro. En vez de
+        // descartarla (y abrir una rendija en la unión), se usa una pieza de 1m acortada al final.
+        if (restante > 0.01f) resultado.Add(restante);
         return resultado;
     }
 
@@ -6188,10 +6206,36 @@ public class WorldGenerator : MonoBehaviour
         return prefabsTuberiaRecta1m;
     }
 
-    private void InstanciarYRegistrarTuberia(Vector3Int celda, GameObject prefab, Vector3 pos, Quaternion rotacion, string nombre)
+    private static bool HayPrefabTuberia(GameObject[] prefabs)
+    {
+        if (prefabs == null) return false;
+        foreach (GameObject prefab in prefabs)
+            if (prefab != null) return true;
+        return false;
+    }
+
+    private static GameObject ElegirPrefabTuberia(GameObject[] prefabs)
+    {
+        int cantidad = 0;
+        foreach (GameObject prefab in prefabs)
+            if (prefab != null) cantidad++;
+        if (cantidad == 0) return null;
+
+        int elegido = Random.Range(0, cantidad);
+        foreach (GameObject prefab in prefabs)
+            if (prefab != null && elegido-- == 0) return prefab;
+        return null;
+    }
+
+    private void InstanciarYRegistrarTuberia(Vector3Int celda, GameObject prefab, Vector3 pos, Quaternion rotacion, string nombre, float escalaLongitud = 1f)
     {
         if (prefab == null) return;
         GameObject go = Instantiate(prefab, pos, rotacion, transform);
+        if (!Mathf.Approximately(escalaLongitud, 1f))
+        {
+            Vector3 escala = go.transform.localScale;
+            go.transform.localScale = new Vector3(escala.x, escala.y, escala.z * escalaLongitud);
+        }
         go.name = nombre;
         go.SetActive(false);
         RegistrarEnCelda(celda, go);
@@ -6209,7 +6253,7 @@ public class WorldGenerator : MonoBehaviour
         foreach (float largo in segmentos)
         {
             GameObject[] candidatos = ArrayTuberiaParaLongitud(largo);
-            if (candidatos != null && candidatos.Length > 0)
+            if (HayPrefabTuberia(candidatos))
             {
                 GameObject prefab = candidatos[Random.Range(0, candidatos.Length)];
                 Vector3 pos = cursor + eje * (largo * 0.5f);
@@ -6220,10 +6264,39 @@ public class WorldGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Tubería modular por conectores: si la celda es un pasillo con exactamente 2 vecinos
-    /// laterales abiertos (recto o esquina, mismo criterio que EsTramoRectoDePasillo), corre
-    /// una tubería de un lado al otro combinando piezas de 1/2/5m, con curva 90° en esquinas.
-    /// El conector queda fijo en el punto medio de cada lado (v1: 1 conector por lado, no 3).
+    /// ¿La tubería puede seguir hacia esta celda vecina? Es hueca y es pasillo de verdad: los
+    /// ensanches no cuentan. Sin esto, un pasillo con un sacado al costado tenía 3 vecinos abiertos,
+    /// dejaba de ser "tramo recto" y la tubería se cortaba justo ahí, con un tapón de cada lado.
+    /// </summary>
+    private bool EsCeldaBaseDeTuberia(int x, int y, int z)
+    {
+        int mx = Mathf.FloorToInt((float)x / macroSize);
+        int my = Mathf.FloorToInt((float)y / macroSize);
+        int mz = Mathf.FloorToInt((float)z / macroSize);
+        int lx = (x % macroSize + macroSize) % macroSize;
+        int ly = (y % macroSize + macroSize) % macroSize;
+        int lz = (z % macroSize + macroSize) % macroSize;
+        if (ly != 1) return false;
+
+        // Solo el trazado estructural del pasillo cuenta como conexión; huecos laterales o salas
+        // abiertas no deben convertir una recta en una T falsa.
+        switch (ObtenerTipoMacroChunk(mx, my, mz))
+        {
+            case 2: return lx == 2;
+            case 3: return lz == 2;
+            case 4: return (lx == 2 && lz >= 2) || (lz == 2 && lx >= 2);
+            case 5: return lx == 2 || lz == 2;
+            case 8: return lx == 2 || (lz == 2 && lx >= 2);
+            default: return false;
+        }
+    }
+
+    private bool VecinoDeTuberia(int x, int y, int z) =>
+        EsPasilloInteractuable(x, y, z) && EsCeldaBaseDeTuberia(x, y, z);
+
+    /// <summary>
+    /// Tubería modular: detecta las salidas del pasillo y permite rectas (2 opuestas), curvas
+    /// (2 en ángulo), uniones T (3, cuando hay prefab asignado) y cruces (4, cuando hay prefab).
     /// </summary>
     /// <summary>
     /// Predice si la celda (x,y,z) generaría tubería (sin instanciar nada) — misma elegibilidad
@@ -6234,21 +6307,84 @@ public class WorldGenerator : MonoBehaviour
     private bool HabraTuberiaEn(int x, int y, int z)
     {
         if (!EsPasilloInteractuable(x, y, z)) return false;
+        if (!EsCeldaBaseDeTuberia(x, y, z)) return false;
         if (HabraCierreEn(x, y, z)) return false;
 
-        bool nE = IsCellEmpty(x + 1, y, z);
-        bool nW = IsCellEmpty(x - 1, y, z);
-        bool nN = IsCellEmpty(x, y, z + 1);
-        bool nS = IsCellEmpty(x, y, z - 1);
+        bool nE = VecinoDeTuberia(x + 1, y, z);
+        bool nW = VecinoDeTuberia(x - 1, y, z);
+        bool nN = VecinoDeTuberia(x, y, z + 1);
+        bool nS = VecinoDeTuberia(x, y, z - 1);
         int total = (nE ? 1 : 0) + (nW ? 1 : 0) + (nN ? 1 : 0) + (nS ? 1 : 0);
-        if (total != 2) return false;
-
+        if (total < 2 || total > 4) return false;
         int hash = semillaDelMundo + x * 28657 + y * 46471 + z * 15629;
         Random.State estadoViejo = Random.state;
         Random.InitState(hash);
         bool debeGenerar = Random.value <= probabilidadTuberia;
         Random.state = estadoViejo;
         return debeGenerar;
+    }
+
+    public enum EstadoDebugTuberia
+    {
+        NoEsPasillo,
+        Ensanche,
+        Cierre,
+        PocasSalidas,
+        SinFittingT,
+        SinFittingCruce,
+        Probabilidad,
+        Genera
+    }
+
+    public struct DiagnosticoTuberia
+    {
+        public EstadoDebugTuberia estado;
+        public bool este, oeste, norte, sur;
+        public int salidas;
+        public Vector3 centro;
+        public Vector3 bordeEste, bordeOeste, bordeNorte, bordeSur;
+    }
+
+    /// <summary>
+    /// Diagnóstico de la misma regla que usa el generador, para dibujar en Game qué celdas
+    /// producirán tubería y dónde se corta la cadena.
+    /// </summary>
+    public DiagnosticoTuberia DiagnosticarTuberia(Vector3Int celda)
+    {
+        var d = new DiagnosticoTuberia { estado = EstadoDebugTuberia.NoEsPasillo };
+        int x = celda.x, y = celda.y, z = celda.z;
+        if (!EsPasilloInteractuable(x, y, z)) return d;
+        if (!EsCeldaBaseDeTuberia(x, y, z))
+        {
+            d.estado = EstadoDebugTuberia.Ensanche;
+            return d;
+        }
+
+        d.este = VecinoDeTuberia(x + 1, y, z);
+        d.oeste = VecinoDeTuberia(x - 1, y, z);
+        d.norte = VecinoDeTuberia(x, y, z + 1);
+        d.sur = VecinoDeTuberia(x, y, z - 1);
+        d.salidas = (d.este ? 1 : 0) + (d.oeste ? 1 : 0) + (d.norte ? 1 : 0) + (d.sur ? 1 : 0);
+
+        int pisosEncima = PisosHuecosEncima(x, y, z);
+        Vector3 centroCelda = CeldaACentroMundoPiso(celda) + Vector3.up * (alturaTuberia + pisosEncima * cellSize);
+        float offsetX = OffsetTuberiaEnEje(x, y, z, ejeX: true);
+        float offsetZ = OffsetTuberiaEnEje(x, y, z, ejeX: false);
+        d.centro = CentroUnionTuberia(centroCelda, d.este || d.oeste, d.norte || d.sur, offsetX, offsetZ);
+        d.bordeEste = BordeUnionTuberia(centroCelda, Vector3Int.right, offsetX, offsetZ, cellSize * 0.5f);
+        d.bordeOeste = BordeUnionTuberia(centroCelda, Vector3Int.left, offsetX, offsetZ, cellSize * 0.5f);
+        d.bordeNorte = BordeUnionTuberia(centroCelda, Vector3Int.forward, offsetX, offsetZ, cellSize * 0.5f);
+        d.bordeSur = BordeUnionTuberia(centroCelda, Vector3Int.back, offsetX, offsetZ, cellSize * 0.5f);
+
+        if (HabraCierreEn(x, y, z)) d.estado = EstadoDebugTuberia.Cierre;
+        else if (d.salidas < 2) d.estado = EstadoDebugTuberia.PocasSalidas;
+        else if (d.salidas == 3 && !HayPrefabTuberia(prefabsTuberiaT)) d.estado = EstadoDebugTuberia.SinFittingT;
+        else if (d.salidas == 4 && !HayPrefabTuberia(prefabsTuberiaCruce)) d.estado = EstadoDebugTuberia.SinFittingCruce;
+        else d.estado = HabraTuberiaEn(x, y, z)
+            ? EstadoDebugTuberia.Genera
+            : EstadoDebugTuberia.Probabilidad;
+
+        return d;
     }
 
     // ===================== CARRILES DE TECHO =====================
@@ -6285,14 +6421,43 @@ public class WorldGenerator : MonoBehaviour
     {
         if (!tuberiaUsaCarrilAleatorio) return 1; // centro — comportamiento de siempre
 
-        bool nE = IsCellEmpty(x + 1, y, z);
-        bool nW = IsCellEmpty(x - 1, y, z);
+        bool nE = VecinoDeTuberia(x + 1, y, z);
+        bool nW = VecinoDeTuberia(x - 1, y, z);
         bool corridaEnX = nE && nW;
+        return CarrilTuberiaEnEje(x, y, z, corridaEnX);
+    }
 
+    private int CarrilTuberiaEnEje(int x, int y, int z, bool ejeX)
+    {
+        if (!tuberiaUsaCarrilAleatorio) return 1;
         // Perpendicular: si corre en X, lo constante a lo largo es Z (y viceversa).
-        int perpendicular = corridaEnX ? z : x;
+        int perpendicular = ejeX ? z : x;
         int hash = semillaDelMundo + perpendicular * 39119 + y * 71413;
         return ((hash % CarrilesTecho) + CarrilesTecho) % CarrilesTecho;
+    }
+
+    private float OffsetTuberiaEnEje(int x, int y, int z, bool ejeX)
+    {
+        return OffsetLateralCarril(CarrilTuberiaEnEje(x, y, z, ejeX));
+    }
+
+    /// <summary>
+    /// Cruces y codos se sitúan en la intersección geométrica de los carriles X y Z.
+    /// Así sus brazos llegan a rectas laterales aunque cada eje haya elegido otro carril.
+    /// </summary>
+    private Vector3 CentroUnionTuberia(Vector3 centroCelda, bool tieneX, bool tieneZ, float offsetX, float offsetZ)
+    {
+        if (tieneX && tieneZ) return centroCelda + Vector3.forward * offsetX + Vector3.right * offsetZ;
+        if (tieneX) return centroCelda + Vector3.forward * offsetX;
+        if (tieneZ) return centroCelda + Vector3.right * offsetZ;
+        return centroCelda;
+    }
+
+    private static Vector3 BordeUnionTuberia(Vector3 centroCelda, Vector3Int direccion,
+        float offsetX, float offsetZ, float medioLadoCelda)
+    {
+        Vector3 borde = centroCelda + new Vector3(direccion.x, 0f, direccion.z) * medioLadoCelda;
+        return direccion.x != 0 ? borde + Vector3.forward * offsetX : borde + Vector3.right * offsetZ;
     }
 
     /// <summary>
@@ -6321,22 +6486,106 @@ public class WorldGenerator : MonoBehaviour
         if (HabraTuberiaEn(nx, ny, nz)) return; // el vecino sigue el recorrido, no es un extremo
 
         GameObject[] candidatos = prefabsTuberiaTapon;
-        if (candidatos == null || candidatos.Length == 0) return;
+        if (!HayPrefabTuberia(candidatos)) return;
 
-        GameObject prefab = candidatos[Random.Range(0, candidatos.Length)];
+        GameObject prefab = ElegirPrefabTuberia(candidatos);
+        if (prefab == null) return;
         Vector3 dirF = new Vector3(direccionHaciaFuera.x, 0, direccionHaciaFuera.z);
         Quaternion rot = Quaternion.LookRotation(dirF, Vector3.up);
         InstanciarYRegistrarTuberia(celda, prefab, puntoBorde, rot, prefab.name + "_tapon");
+    }
+
+    /// <summary>
+    /// Cuántos pisos huecos tiene esta celda ENCIMA (0 = techo normal). Es lo que suben la tubería y
+    /// las luces de techo en un sacado de techo alto, para colgar del techo real y no del viejo.
+    /// </summary>
+    private int PisosHuecosEncima(int x, int y, int z)
+    {
+        int n = 0;
+        while (n < macroSize && IsCellEmpty(x, y + n + 1, z)) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// Subida de tubería en el borde de una celda de techo alto: si el vecino también lleva tubería
+    /// pero más abajo, las une con un tramo vertical y un codo en cada punta. Lo pone la celda ALTA.
+    /// El tramo sube un poco adentro de la celda alta (medio codo), pegado al muro que queda sobre
+    /// el vecino. `bordeAlto` es el extremo de la tubería de esta celda, ya a su altura.
+    /// </summary>
+    private void SubirTuberiaSiHaceFalta(Vector3Int celda, Vector3 bordeAlto, Vector3Int direccionHaciaFuera, int nx, int ny, int nz, int pisosPropios)
+    {
+        if (pisosPropios <= 0) return;
+        if (!HabraTuberiaEn(nx, ny, nz)) return;
+        int pisosVecino = PisosHuecosEncima(nx, ny, nz);
+        if (pisosVecino >= pisosPropios) return; // misma altura, o la subida le toca al vecino
+
+        Vector3 haciaFuera = new Vector3(direccionHaciaFuera.x, 0f, direccionHaciaFuera.z);
+        Vector3 haciaDentro = -haciaFuera;
+        GameObject[] curvas = prefabsTuberiaCurva90;
+        bool hayCodo = HayPrefabTuberia(curvas);
+        float medioCodo = hayCodo ? longitudCurvaTuberia * 0.5f : 0f;
+
+        Vector3 arriba = bordeAlto + haciaDentro * medioCodo;
+        Vector3 abajo = arriba - Vector3.up * ((pisosPropios - pisosVecino) * cellSize);
+
+        // Tramo vertical entre los dos codos.
+        float largo = Mathf.Max(0f, (arriba.y - abajo.y) - 2f * medioCodo);
+        Quaternion rotVertical = Quaternion.LookRotation(Vector3.up, haciaDentro);
+        Vector3 cursor = abajo + Vector3.up * medioCodo;
+        foreach (float pieza in DescomponerLongitudTuberia(largo))
+        {
+            GameObject[] candidatos = ArrayTuberiaParaLongitud(pieza);
+            if (HayPrefabTuberia(candidatos))
+            {
+                GameObject prefab = ElegirPrefabTuberia(candidatos);
+                if (prefab != null)
+                    InstanciarYRegistrarTuberia(celda, prefab, cursor + Vector3.up * (pieza * 0.5f), rotVertical,
+                        prefab.name + "_subida", pieza < 1f ? pieza : 1f);
+            }
+            cursor += Vector3.up * pieza;
+        }
+
+        // Codos. El prefab une su +X con su +Z (esquina NE a yaw 0): se gira para que una pata
+        // quede vertical y la otra horizontal.
+        if (!hayCodo) return; // sin fitting, los tramos rectos ya llegan hasta el mismo punto
+        Quaternion ajuste = Quaternion.Euler(0f, yawBaseTuberiaCurva, 0f);
+
+        // Abajo: viene del vecino (horizontal, hacia afuera) y dobla hacia ARRIBA.
+        GameObject codoAbajo = ElegirPrefabTuberia(curvas);
+        if (codoAbajo == null) return;
+        Quaternion rotAbajo = Quaternion.LookRotation(haciaFuera, Vector3.Cross(haciaFuera, Vector3.up)) * ajuste;
+        InstanciarYRegistrarTuberia(celda, codoAbajo, abajo, rotAbajo, codoAbajo.name + "_codo_subida");
+
+        // Arriba: llega desde ABAJO y dobla hacia adentro de la celda alta.
+        GameObject codoArriba = ElegirPrefabTuberia(curvas);
+        if (codoArriba == null) return;
+        Quaternion rotArriba = Quaternion.LookRotation(haciaDentro, Vector3.Cross(haciaDentro, Vector3.down)) * ajuste;
+        InstanciarYRegistrarTuberia(celda, codoArriba, arriba, rotArriba, codoArriba.name + "_codo_subida");
+    }
+
+    /// <summary>Conecta un brazo recto al fitting central y resuelve tapón/subida en el borde de celda.</summary>
+    private void InstanciarBrazoUnionTuberia(Vector3Int celda, Vector3 centroCelda, Vector3 centroUnion,
+        Vector3Int direccion, int x, int y, int z, int pisosEncima, float offsetX, float offsetZ, float largoFitting)
+    {
+        Vector3 dir = new Vector3(direccion.x, 0f, direccion.z);
+        Vector3 borde = BordeUnionTuberia(centroCelda, direccion, offsetX, offsetZ, cellSize * 0.5f);
+        float largoRecto = Mathf.Max(0f, Vector3.Dot(centroUnion - borde, -dir) - largoFitting * 0.5f);
+        InstanciarCadenaTuberiaRecta(celda, borde, -direccion, DescomponerLongitudTuberia(largoRecto));
+
+        int nx = x + direccion.x;
+        int nz = z + direccion.z;
+        TaponarSiHaceFalta(celda, borde, direccion, nx, y, nz);
+        SubirTuberiaSiHaceFalta(celda, borde, direccion, nx, y, nz, pisosEncima);
     }
 
     private void IntentarGenerarTuberiaModular(Vector3Int celda, int x, int y, int z, Vector3 origin)
     {
         if (!HabraTuberiaEn(x, y, z)) return;
 
-        bool nE = IsCellEmpty(x + 1, y, z);
-        bool nW = IsCellEmpty(x - 1, y, z);
-        bool nN = IsCellEmpty(x, y, z + 1);
-        bool nS = IsCellEmpty(x, y, z - 1);
+        bool nE = VecinoDeTuberia(x + 1, y, z);
+        bool nW = VecinoDeTuberia(x - 1, y, z);
+        bool nN = VecinoDeTuberia(x, y, z + 1);
+        bool nS = VecinoDeTuberia(x, y, z - 1);
 
         Vector3 cellCenter = origin + new Vector3(
             x * cellSize + cellSize * 0.5f,
@@ -6344,9 +6593,53 @@ public class WorldGenerator : MonoBehaviour
             z * cellSize + cellSize * 0.5f
         );
 
+        // Techo alto (sacado): la tubería corre colgada del techo REAL, no del viejo.
+        int pisosEncima = PisosHuecosEncima(x, y, z);
+        cellCenter.y += pisosEncima * cellSize;
+
         // El desplazamiento lateral sale del CARRIL que le tocó a esta corrida (ver
         // CarrilTuberiaEn) — es lo que después respetan las luces para no encimarse.
         float offsetCarril = OffsetLateralCarril(CarrilTuberiaEn(x, y, z));
+        float offsetX = OffsetTuberiaEnEje(x, y, z, ejeX: true);
+        float offsetZ = OffsetTuberiaEnEje(x, y, z, ejeX: false);
+
+        int totalSalidas = (nE ? 1 : 0) + (nW ? 1 : 0) + (nN ? 1 : 0) + (nS ? 1 : 0);
+        if (totalSalidas >= 3)
+        {
+            bool esT = totalSalidas == 3;
+            GameObject[] prefabsUnion = esT ? prefabsTuberiaT : prefabsTuberiaCruce;
+            GameObject prefabUnion = ElegirPrefabTuberia(prefabsUnion);
+
+            Vector3Int[] salidas =
+            {
+                new Vector3Int(1, 0, 0), new Vector3Int(-1, 0, 0),
+                new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1)
+            };
+            bool[] abiertas = { nE, nW, nN, nS };
+            Vector3 centroUnion = CentroUnionTuberia(cellCenter, nE || nW, nN || nS, offsetX, offsetZ);
+            // Sin fitting, alargar brazos hasta el centro para que se toquen.
+            // Con fitting, dejar el hueco para encajar sus conectores.
+            float largoFitting = prefabUnion != null ? Mathf.Max(0f, longitudUnionTuberia) : 0f;
+            for (int i = 0; i < salidas.Length; i++)
+                if (abiertas[i])
+                    InstanciarBrazoUnionTuberia(celda, cellCenter, centroUnion, salidas[i], x, y, z,
+                        pisosEncima, offsetX, offsetZ, largoFitting);
+
+            if (prefabUnion != null && esT)
+            {
+                // La T se modela con tres brazos abiertos (+X,+Z,-X) y el lado -Z cerrado.
+                // Se gira para que el extremo cerrado coincida con la dirección ausente.
+                float yaw = !nS ? 0f : (!nW ? 90f : (!nN ? 180f : 270f));
+                InstanciarYRegistrarTuberia(celda, prefabUnion, centroUnion,
+                    Quaternion.Euler(0f, yaw + yawBaseTuberiaT, 0f), prefabUnion.name + "_union_T");
+            }
+            else if (prefabUnion != null)
+            {
+                InstanciarYRegistrarTuberia(celda, prefabUnion, centroUnion, Quaternion.identity,
+                    prefabUnion.name + "_union_cruce");
+            }
+            return;
+        }
 
         if (nE && nW) // tramo recto en X
         {
@@ -6358,6 +6651,8 @@ public class WorldGenerator : MonoBehaviour
 
             TaponarSiHaceFalta(celda, edgeOeste, new Vector3Int(-1, 0, 0), x - 1, y, z);
             TaponarSiHaceFalta(celda, edgeEste, new Vector3Int(1, 0, 0), x + 1, y, z);
+            SubirTuberiaSiHaceFalta(celda, edgeOeste, new Vector3Int(-1, 0, 0), x - 1, y, z, pisosEncima);
+            SubirTuberiaSiHaceFalta(celda, edgeEste, new Vector3Int(1, 0, 0), x + 1, y, z, pisosEncima);
         }
         else if (nN && nS) // tramo recto en Z
         {
@@ -6369,23 +6664,31 @@ public class WorldGenerator : MonoBehaviour
 
             TaponarSiHaceFalta(celda, edgeSur, new Vector3Int(0, 0, -1), x, y, z - 1);
             TaponarSiHaceFalta(celda, edgeNorte, new Vector3Int(0, 0, 1), x, y, z + 1);
+            SubirTuberiaSiHaceFalta(celda, edgeSur, new Vector3Int(0, 0, -1), x, y, z - 1, pisosEncima);
+            SubirTuberiaSiHaceFalta(celda, edgeNorte, new Vector3Int(0, 0, 1), x, y, z + 1, pisosEncima);
         }
         else // esquina: 2 vecinos perpendiculares
         {
-            float largoLibre = Mathf.Max(0f, cellSize * 0.5f - longitudCurvaTuberia * 0.5f);
-            List<float> segmentos = DescomponerLongitudTuberia(largoLibre);
+            GameObject[] curvas = prefabsTuberiaCurva90;
+            GameObject prefabCurva = ElegirPrefabTuberia(curvas);
+            float largoCodo = prefabCurva != null ? Mathf.Max(0f, longitudCurvaTuberia) : 0f;
 
             Vector3Int dirA = nE ? new Vector3Int(1, 0, 0) : new Vector3Int(-1, 0, 0);
             Vector3Int dirB = nN ? new Vector3Int(0, 0, 1) : new Vector3Int(0, 0, -1);
 
-            Vector3 edgeA = cellCenter + new Vector3(dirA.x, 0, dirA.z) * (cellSize * 0.5f);
-            Vector3 edgeB = cellCenter + new Vector3(dirB.x, 0, dirB.z) * (cellSize * 0.5f);
+            Vector3 centroUnion = CentroUnionTuberia(cellCenter, true, true, offsetX, offsetZ);
+            Vector3 edgeA = BordeUnionTuberia(cellCenter, dirA, offsetX, offsetZ, cellSize * 0.5f);
+            Vector3 edgeB = BordeUnionTuberia(cellCenter, dirB, offsetX, offsetZ, cellSize * 0.5f);
 
-            InstanciarCadenaTuberiaRecta(celda, edgeA, -dirA, segmentos);
-            InstanciarCadenaTuberiaRecta(celda, edgeB, -dirB, segmentos);
+            float largoA = Mathf.Max(0f, Vector3.Dot(centroUnion - edgeA, -new Vector3(dirA.x, 0f, dirA.z)) - largoCodo * 0.5f);
+            float largoB = Mathf.Max(0f, Vector3.Dot(centroUnion - edgeB, -new Vector3(dirB.x, 0f, dirB.z)) - largoCodo * 0.5f);
+            InstanciarCadenaTuberiaRecta(celda, edgeA, -dirA, DescomponerLongitudTuberia(largoA));
+            InstanciarCadenaTuberiaRecta(celda, edgeB, -dirB, DescomponerLongitudTuberia(largoB));
 
             TaponarSiHaceFalta(celda, edgeA, dirA, x + dirA.x, y, z + dirA.z);
             TaponarSiHaceFalta(celda, edgeB, dirB, x + dirB.x, y, z + dirB.z);
+            SubirTuberiaSiHaceFalta(celda, edgeA, dirA, x + dirA.x, y, z + dirA.z, pisosEncima);
+            SubirTuberiaSiHaceFalta(celda, edgeB, dirB, x + dirB.x, y, z + dirB.z, pisosEncima);
 
             // Tabla de yaw cardinal (mismo criterio que Vértices Convexos, §5.5): prefab
             // modelado por defecto para la esquina NE.
@@ -6395,12 +6698,10 @@ public class WorldGenerator : MonoBehaviour
             else if (nW && nS) yaw = 180f;
             else yaw = -90f; // nW && nN
 
-            GameObject[] curvas = prefabsTuberiaCurva90;
-            if (curvas != null && curvas.Length > 0)
+            if (prefabCurva != null)
             {
-                GameObject prefabCurva = curvas[Random.Range(0, curvas.Length)];
                 Quaternion rotCurva = Quaternion.Euler(0, yaw + yawBaseTuberiaCurva, 0);
-                InstanciarYRegistrarTuberia(celda, prefabCurva, cellCenter, rotCurva, prefabCurva.name + "_curva");
+                InstanciarYRegistrarTuberia(celda, prefabCurva, centroUnion, rotCurva, prefabCurva.name + "_curva");
             }
         }
     }

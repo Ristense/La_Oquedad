@@ -165,7 +165,7 @@ MonoBehaviour:
   probabilidadBalcon: 0.2
   prefabBalcon: {fileID: 0}
   balconOffset: 0
-  probabilidadTuberia: 0.5
+  probabilidadTuberia: 1
   prefabsTuberiaRecta1m:
   - {fileID: 0}
   prefabsTuberiaRecta2m:
@@ -174,12 +174,18 @@ MonoBehaviour:
   - {fileID: 0}
   prefabsTuberiaCurva90:
   - {fileID: 0}
+  prefabsTuberiaT: []
+  prefabsTuberiaCruce: []
   prefabsTuberiaTapon:
   - {fileID: 0}
   alturaTuberia: 19
   tuberiaOffsetLateral: 0
   longitudCurvaTuberia: 2
   yawBaseTuberiaCurva: 0
+  longitudUnionTuberia: 2
+  yawBaseTuberiaT: 0
+  dibujarDebugTuberias: 1
+  radioDebugTuberias: 8
   escalaDensidad: 0.2
   spawnEnVivienda: 0
   spawnEnCuartelDebug: 1
