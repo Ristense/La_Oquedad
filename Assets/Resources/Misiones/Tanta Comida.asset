@@ -22,7 +22,9 @@ MonoBehaviour:
   - "\xA1Gracias! No sab\xE9s lo que nos sirve esto."
   frasesEntregaParcial:
   - "\xA1Bien, uno menos!"
-  prefabCofre: {fileID: 2811944303938828514, guid: d19af6eec749b0c408dd60345675ac4e, type: 3}
+  frasesRechazo:
+  - "\xBFEn serio? Lo ten\xE9s en la mano... Est\xE1 bien, ya veremos c\xF3mo nos arreglamos."
+  prefabCofre: {fileID: 815478335885546062, guid: d790f7ca821573c4d8ac14c43065b412, type: 3}
   objetosPedidos:
   - prefab: {fileID: 5219307798337005664, guid: abeeae249e3c1d54798cb28e294bf940, type: 3}
     cantidad: 2
