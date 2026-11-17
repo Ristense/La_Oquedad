@@ -804,6 +804,24 @@ public class Centinela : MonoBehaviour
         ultimaPosJugador = pos;
     }
 
+    /// <summary>Centinelas activos ahora mismo (para que otros sistemas, como el dron, sepan quién los puede ver).</summary>
+    public static readonly System.Collections.Generic.List<Centinela> Activos = new System.Collections.Generic.List<Centinela>();
+    void OnEnable() => Activos.Add(this);
+    void OnDisable() => Activos.Remove(this);
+
+    /// <summary>
+    /// ¿Ve este punto con la MISMA vista que usa para el jugador? Distancia, cono desde los ojos y
+    /// línea de vista. Para cosas que no son el jugador (el dron): no registra avistamiento ni cambia
+    /// de estado; eso lo decide quien pregunta.
+    /// </summary>
+    public bool VePunto(Vector3 punto)
+    {
+        if ((punto - PosOjos).sqrMagnitude > distanciaVision * distanciaVision) return false;
+        float angulo = Vector3.Angle(MiradaForward, (punto - PosOjos).normalized);
+        if (angulo > Mathf.Min(anguloVision, 360f) * 0.5f) return false;
+        return PuedeVer(punto);
+    }
+
     private bool PuedeVer(Vector3 posObjetivo)
     {
         return !Physics.Linecast(PosOjos, posObjetivo, capasObstaculo, QueryTriggerInteraction.Ignore);
