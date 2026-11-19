@@ -109,6 +109,20 @@ public class CompaneroDron : MonoBehaviour
             mouseLook = jugador.GetComponentInChildren<MouseLook>();
         }
 
+        // Cámara y luz tienen que ser DEL DRON. Si en el Inspector quedaron apuntando a la Main
+        // Camera o a la linterna del jugador, el dron se las adueñaba: le ponía su textura a la
+        // cámara del jugador y la apagaba ("No cameras rendering").
+        if (camara != null && EsDelJugador(camara.transform))
+        {
+            Debug.LogWarning($"[Dron] 'Camara' apuntaba a '{camara.name}', que es del jugador. Se ignora y el dron usa una propia: dejá el campo vacío o poné una cámara hija del dron.", this);
+            camara = null;
+        }
+        if (luz != null && EsDelJugador(luz.transform))
+        {
+            Debug.LogWarning($"[Dron] 'Luz' apuntaba a '{luz.name}', que es del jugador. Se ignora y el dron usa una propia.", this);
+            luz = null;
+        }
+
         if (luz == null)
         {
             var go = new GameObject("Luz (auto)");
@@ -120,20 +134,40 @@ public class CompaneroDron : MonoBehaviour
             Debug.Log("[Dron] No tenía Luz asignada: creé un Spot de prueba. Poné el tuyo en el prefab.", this);
         }
 
+        rt = new RenderTexture(640, 360, 24) { name = "RT_CamaraDron" };
+        rt.Create();
+
         if (camara == null)
         {
+            // Se arma APAGADA y con su textura puesta antes de prenderse: una cámara recién creada
+            // apunta al Display 1 hasta que le asignás la textura, y con HDRP eso dejaba a la
+            // Main Camera sin pantalla ("No cameras rendering").
             var go = new GameObject("CamaraDron (auto)");
+            go.SetActive(false);
             go.transform.SetParent(transform, false);
             camara = go.AddComponent<Camera>();
             camara.nearClipPlane = 0.1f;
+            camara.targetTexture = rt;
+            camara.enabled = false;
+            go.SetActive(true);
             Debug.Log("[Dron] No tenía Cámara asignada: creé una de prueba. Poné la tuya en el prefab.", this);
         }
 
-        rt = new RenderTexture(640, 360, 24) { name = "RT_CamaraDron" };
         camara.targetTexture = rt;
+        camara.targetDisplay = 7;          // nunca el Display 1 de la Main Camera
+        camara.depth = -100f;              // y siempre por debajo de ella
+        camara.enabled = false;            // la prende ActualizarVentanita solo cuando hay que mostrarla
         CrearVentanita();
 
         if (jugador != null) transform.position = PosicionSeguir();
+    }
+
+    /// <summary>¿Es la Main Camera, o algo dentro del jugador (y no del propio dron)?</summary>
+    private bool EsDelJugador(Transform t)
+    {
+        if (t == null || t.IsChildOf(transform)) return false;
+        if (t.CompareTag("MainCamera") || (Camera.main != null && t == Camera.main.transform)) return true;
+        return jugador != null && t.IsChildOf(jugador);
     }
 
     void OnDestroy()

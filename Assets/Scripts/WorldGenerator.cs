@@ -270,12 +270,6 @@ public class WorldGenerator : MonoBehaviour
     public float longitudUnionTuberia = 2f;
     [Tooltip("Yaw extra para orientar la pieza T si su orientación base difiere de brazos +X, +Z y -X.")]
     public float yawBaseTuberiaT = 0f;
-    [Header("Debug de Tuberías")]
-    [Tooltip("Dibuja en el Game la ruta de tuberías alrededor del jugador. Celeste = pieza asignada, verde = brazos unidos al centro sin fitting, amarillo = fallo de probabilidad, naranjo = cierre, morado = final sin continuidad.")]
-    public bool dibujarDebugTuberias = true;
-    [Tooltip("Radio en celdas alrededor del jugador para mostrar la ruta y sus cortes.")]
-    [Min(1)]
-    public int radioDebugTuberias = 8;
 
     [Header("Generación de Biomas")]
     public float escalaDensidad = 0.15f;
@@ -599,7 +593,6 @@ public class WorldGenerator : MonoBehaviour
     {
         // Dibujante de los puntos de andamio: se agrega solo, se prende/apaga con dibujarPuntosAndamio.
         if (GetComponent<DebugAndamiosComunidad>() == null) gameObject.AddComponent<DebugAndamiosComunidad>();
-        if (GetComponent<DebugTuberiasModulares>() == null) gameObject.AddComponent<DebugTuberiasModulares>();
 
         // El toggle de debug manda sobre el guardado: si no, cargar la partida te devolvía a donde
         // estabas y el spawn en cuartel nunca llegaba a calcularse.
