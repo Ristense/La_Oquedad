@@ -42,6 +42,10 @@ public class Centinela : MonoBehaviour
     public float tiempoInspeccionMin = 2f;
     public float tiempoInspeccionMax = 6f;
 
+    [Header("Modelo")]
+    [Tooltip("OPCIONAL: el hijo con el modelo (Sentinela). El objeto raíz sigue girando en todos los ejes al volar, pero este modelo solo gira en Y: mira hacia los lados sin inclinarse adelante/atrás ni de costado.")]
+    public Transform modelo;
+
     [Header("Percepción")]
     [Tooltip("Cada cuántos segundos chequea si ve al jugador (no cada frame).")]
     public float intervaloPercepcion = 0.2f;
@@ -169,8 +173,29 @@ public class Centinela : MonoBehaviour
     private int indiceRuta;
     private float tiempoDescansoRestante;
 
+    // Rotación del modelo relativa al yaw de la raíz, tomada al arrancar: respeta cómo lo dejaste
+    // armado en el prefab (por ejemplo, un FBX que viene rotado -90 en X).
+    private Quaternion offsetModelo = Quaternion.identity;
+    private Quaternion ultimoYaw = Quaternion.identity;
+
+    private Quaternion YawDeRaiz()
+    {
+        Vector3 f = transform.forward;
+        f.y = 0f;
+        // Mirando casi recto arriba o abajo el forward plano no sirve: se mantiene el último yaw.
+        if (f.sqrMagnitude > 0.0001f) ultimoYaw = Quaternion.LookRotation(f.normalized, Vector3.up);
+        return ultimoYaw;
+    }
+
+    void LateUpdate()
+    {
+        if (modelo != null) modelo.rotation = YawDeRaiz() * offsetModelo;
+    }
+
     void Start()
     {
+        if (modelo != null) offsetModelo = Quaternion.Inverse(YawDeRaiz()) * modelo.rotation;
+
         GameObject p = GameObject.FindGameObjectWithTag("Player");
         if (p != null) jugador = p.transform;
 

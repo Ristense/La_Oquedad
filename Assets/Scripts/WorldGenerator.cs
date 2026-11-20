@@ -284,7 +284,7 @@ public class WorldGenerator : MonoBehaviour
     [Header("Jugador y Spawn")]
     [Tooltip("ON = el jugador arranca siempre en una vivienda (sala tipo 1, en una celda de paso del 3x3 — nunca esquinas con secciones ni la central con estructura). OFF = spawn aleatorio: cualquier vivienda O pasillo. En AMBOS modos los cuarteles de centinelas quedan excluidos — nunca arrancás en la sala de los vigías.")]
     public bool spawnEnVivienda = true;
-    [Tooltip("SOLO DEBUG. ON = arrancás DENTRO del cuartel de centinelas más cercano al origen, ignorando spawnEnVivienda Y el guardado (cargarPartidaAlIniciar se saltea, si no la partida guardada te devolvía a donde estabas). Es exactamente la misma celda que usa RondaCentinelas para spawnear la ronda, así que los centinelas aparecen encima tuyo. Acordate de apagarlo antes de jugar en serio.")]
+    [Tooltip("SOLO DEBUG. ON = arrancás dentro del cuartel de centinelas más cercano al origen, en una celda lateral libre (no encima del prefab central). Ignora spawnEnVivienda y el guardado. La ronda sale del mismo cuartel. Acordate de apagarlo antes de jugar en serio.")]
     public bool spawnEnCuartelDebug = false;
     [Tooltip("SOLO DEBUG. ON = arrancás en la boca de pasillo pegada al POZO VERTICAL (tipo 6) más cercano al origen. Igual que el de cuartel: ignora spawnEnVivienda y el guardado. Si también está prendido el de cuartel, manda el cuartel.")]
     public bool spawnEnPozoVerticalDebug = false;
@@ -827,6 +827,98 @@ public class WorldGenerator : MonoBehaviour
         return false;
     }
 
+    private bool TryElegirCeldaLibreCuartel(Vector3Int celdaCentral, out Vector3Int celdaLibre)
+    {
+        celdaLibre = default;
+        Vector3Int macro = CeldaAMacroChunk(celdaCentral);
+        int pisoY = macro.y * macroSize + 1;
+        int centroX = macro.x * macroSize + macroSize / 2;
+        int centroZ = macro.z * macroSize + macroSize / 2;
+        Vector2Int[] lados =
+        {
+            new Vector2Int(0, -1),
+            new Vector2Int(-1, 0),
+            new Vector2Int(1, 0),
+            new Vector2Int(0, 1)
+        };
+
+        var candidatas = new List<Vector3Int>(lados.Length);
+        foreach (Vector2Int lado in lados)
+        {
+            Vector3Int c = new Vector3Int(centroX + lado.x, pisoY, centroZ + lado.y);
+            if (!IsCellEmpty(c.x, c.y, c.z) || IsCellEmpty(c.x, c.y - 1, c.z)) continue;
+            candidatas.Add(c);
+        }
+
+        if (candidatas.Count == 0) return false;
+        celdaLibre = candidatas[Random.Range(0, candidatas.Count)];
+        return true;
+    }
+
+    /// <summary>
+    /// Primero busca los cuarteles normales dentro del radio del Inspector. Si no encuentra uno,
+    /// calcula los cuarteles garantizados por isla en anillos de regiones y devuelve el más cercano.
+    /// Así el spawn debug no termina silenciosamente en el spawn normal por un radio corto.
+    /// </summary>
+    private bool TryEncontrarCuartelParaSpawn(Vector3 cerca, out Vector3Int celdaCentral)
+    {
+        if (TryEncontrarSalaCentinela(cerca, radioBusquedaCuartelDebugMacros, out celdaCentral))
+            return true;
+
+        celdaCentral = default;
+        if (!cuartelGarantizadoPorIsla || ElegirRoomDataCuartel(0, 0, 0) == null)
+            return false;
+
+        Vector3Int macroCerca = CeldaAMacroChunk(MundoACelda(cerca));
+        Vector3Int regionCerca = RegionDeChunk(macroCerca.x, macroCerca.y, macroCerca.z);
+
+        // El mundo es infinito; buscar regiones completas en anillos deterministas garantiza
+        // encontrar una isla normal con cuartel sin depender del radio de búsqueda del Inspector.
+        const int radioMaximoRegiones = 32;
+        for (int radio = 0; radio <= radioMaximoRegiones; radio++)
+        {
+            float mejorDistancia = float.MaxValue;
+            Vector3Int mejorCelda = default;
+            bool encontrada = false;
+
+            for (int rx = regionCerca.x - radio; rx <= regionCerca.x + radio; rx++)
+                for (int ry = regionCerca.y - radio; ry <= regionCerca.y + radio; ry++)
+                    for (int rz = regionCerca.z - radio; rz <= regionCerca.z + radio; rz++)
+                    {
+                        if (Mathf.Abs(rx - regionCerca.x) != radio &&
+                            Mathf.Abs(ry - regionCerca.y) != radio &&
+                            Mathf.Abs(rz - regionCerca.z) != radio)
+                            continue;
+
+                        if (IslaEsColosal(rx, ry, rz)) continue;
+                        if (!TryCuartelDeIsla(new Vector3Int(rx, ry, rz), out Vector3Int macroCuartel))
+                            continue;
+                        if (ElegirRoomDataCuartel(macroCuartel.x, macroCuartel.y, macroCuartel.z) == null)
+                            continue;
+
+                        Vector3Int candidata = new Vector3Int(
+                            macroCuartel.x * macroSize + macroSize / 2,
+                            macroCuartel.y * macroSize + 1,
+                            macroCuartel.z * macroSize + macroSize / 2);
+                        float distancia = (CeldaACentroMundoPiso(candidata) - cerca).sqrMagnitude;
+                        if (distancia >= mejorDistancia) continue;
+
+                        mejorDistancia = distancia;
+                        mejorCelda = candidata;
+                        encontrada = true;
+                    }
+
+            if (encontrada)
+            {
+                celdaCentral = mejorCelda;
+                Debug.LogWarning($"[WorldGenerator] Spawn debug: el cuartel no estaba en el radio del Inspector; calculé uno cercano en {celdaCentral}.");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void DefinirPuntoDeSpawn(int semillaExtra = 7777)
     {
         // Aleatorio por semilla (respeta usarSemillaAleatoria: si está activo, la semilla ya fue
@@ -838,24 +930,31 @@ public class WorldGenerator : MonoBehaviour
         Random.State prev = Random.state;
         Random.InitState(semillaDelMundo + semillaExtra);
 
-        // DEBUG: cortocircuita toda la cascada y te deja en el cuartel. Misma celda que usa
-        // RondaCentinelas.SpawnearDesdeCuartel, así que la ronda sale encima tuyo en vez de
-        // tener que buscarla por la isla durante minutos.
+        // DEBUG: cortocircuita toda la cascada y te deja DENTRO del cuartel. No usar su celda
+        // central: ahí se instancia el prefab central y su collider podía empujarte afuera.
         if (spawnEnCuartelDebug)
         {
-            if (TryEncontrarSalaCentinela(transform.position, radioBusquedaCuartelDebugMacros, out Vector3Int celdaCuartelDebug))
+            if (TryEncontrarCuartelParaSpawn(transform.position, out Vector3Int celdaCuartelDebug))
             {
-                celdaSpawn = celdaCuartelDebug;
-                posicionSpawn = transform.position + new Vector3(
-                    celdaSpawn.x * cellSize + (cellSize / 2f),
-                    celdaSpawn.y * cellSize + 2f,
-                    celdaSpawn.z * cellSize + (cellSize / 2f)
-                );
-                Debug.LogWarning($"[WorldGenerator] SPAWN EN CUARTEL (DEBUG) · celda {celdaSpawn} · pos {posicionSpawn}. Acordate de apagar 'Spawn En Cuartel Debug'.");
+                bool encontroCeldaLibre = TryElegirCeldaLibreCuartel(celdaCuartelDebug, out celdaSpawn);
+                if (!encontroCeldaLibre)
+                {
+                    // En un cuartel tipo Sala Chica la planta es 3x3. Si la geometría está
+                    // mal configurada y el chequeo de vacío falla, usar de todos modos un lado
+                    // del centro evita caer en el prefab central o salirse del edificio.
+                    celdaSpawn = celdaCuartelDebug + Vector3Int.forward;
+                    Debug.LogWarning($"[WorldGenerator] Cuartel {celdaCuartelDebug} sin celda lateral detectada como libre; uso {celdaSpawn} para mantener el spawn dentro del cuartel.");
+                }
+
+                posicionSpawn = CeldaACentroMundoPiso(celdaSpawn) + Vector3.up * 2f;
+                Debug.LogWarning($"[WorldGenerator] SPAWN DENTRO DEL CUARTEL (DEBUG) · celda {celdaSpawn} · pos {posicionSpawn}. Acordate de apagar 'Spawn En Cuartel Debug'.");
                 Random.state = prev;
                 return;
             }
-            Debug.LogWarning($"[WorldGenerator] 'Spawn En Cuartel Debug' activo pero no hay ningún cuartel dentro de {radioBusquedaCuartelDebugMacros} macro chunks del origen — spawn normal. Subí el radio o cambiá de semilla.");
+
+            Debug.LogError("[WorldGenerator] 'Spawn En Cuartel Debug' está activo, pero no hay RoomData de cuartel configurada o no se pudo calcular ningún cuartel. No usaré el spawn normal: revisá cuartelGarantizadoPorIsla y las RoomData.");
+            Random.state = prev;
+            return;
         }
 
         if (spawnEnPozoVerticalDebug)
